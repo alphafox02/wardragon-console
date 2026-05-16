@@ -28,6 +28,7 @@ class SnapshotStore:
             "dragonsync_status": {"payload": None, "seen_at": None, "error": None},
             "drones": {"payload": {"drones": []}, "seen_at": None, "error": None},
             "signals": {"payload": {"signals": []}, "seen_at": None, "error": None},
+            "updates": {"payload": None, "seen_at": None, "error": None},
         }
 
     @property
@@ -81,6 +82,7 @@ class SnapshotStore:
                 "drone_count": len(drones.get("drones", [])) if isinstance(drones, dict) else 0,
                 "signal_count": len(signals.get("signals", [])) if isinstance(signals, dict) else 0,
             },
+            "updates": data["updates"]["payload"] or {},
         }
 
     def _service_state(self, seen_at: float | None, now: float, timing: SourceTiming) -> dict[str, Any]:

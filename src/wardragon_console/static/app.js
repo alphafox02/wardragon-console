@@ -59,6 +59,7 @@ document.getElementById("write-toggle").addEventListener("click", () => {
 
 document.getElementById("restart-dragonsync").addEventListener("click", restartDragonSync);
 document.getElementById("upload-cert").addEventListener("click", uploadCertificate);
+document.getElementById("check-updates").addEventListener("click", checkForUpdates);
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-reveal]");
   if (!button) return;
@@ -153,6 +154,66 @@ function renderSnapshot() {
     "DragonSync API": snap.dragonsync.status.error || "OK",
     Generated: new Date(snap.generated_at * 1000).toLocaleString(),
   });
+  renderUpdates(snap.updates || {});
+}
+
+function renderUpdates(updates) {
+  const target = document.getElementById("update-info");
+  if (!updates.checked_at) {
+    target.innerHTML = `<div class="subtle">Click "Check for updates" to query GitHub.</div>`;
+    return;
+  }
+  const sections = ["console", "dragonsync"].map((key) => {
+    const info = updates[key];
+    if (!info) return "";
+    const repoLabel = key === "console" ? "WarDragon Console" : "DragonSync";
+    const repoLink = info.repo ? `<a href="https://github.com/${escapeAttr(info.repo)}" target="_blank" rel="noopener">${escapeHtml(info.repo)}</a>` : "";
+    const rows = {};
+    if (info.local_version) rows["Local version"] = info.local_version;
+    if (info.local_sha) rows["Local commit"] = info.local_sha;
+    if (info.upstream_sha) rows[`Upstream ${info.upstream_branch || "main"}`] = info.upstream_sha;
+    if (info.latest_release_tag) {
+      rows["Latest release"] = info.latest_release_url
+        ? `<a href="${escapeAttr(info.latest_release_url)}" target="_blank" rel="noopener">${escapeHtml(info.latest_release_tag)}</a>`
+        : info.latest_release_tag;
+    }
+    if (info.error) rows["Status"] = `error: ${info.error}`;
+    else if (info.update_available) {
+      const link = info.compare_url || (info.latest_release_url || (info.repo ? `https://github.com/${info.repo}/releases` : ""));
+      rows["Status"] = link
+        ? `update available — <a href="${escapeAttr(link)}" target="_blank" rel="noopener">view changes</a>`
+        : "update available";
+    } else if (info.upstream_sha || info.latest_release_tag) {
+      rows["Status"] = "up to date";
+    }
+    const items = Object.entries(rows).map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${v}</dd>`).join("");
+    return `<div class="update-row"><h3>${escapeHtml(repoLabel)}</h3><div class="update-repo subtle">${repoLink}</div><dl>${items}</dl></div>`;
+  }).join("");
+  const checked = new Date(updates.checked_at * 1000).toLocaleString();
+  target.innerHTML = `${sections}<div class="subtle update-checked">Checked ${escapeHtml(checked)}</div>`;
+}
+
+async function checkForUpdates() {
+  const button = document.getElementById("check-updates");
+  const target = document.getElementById("update-info");
+  if (button.dataset.busy === "1") return;
+  button.dataset.busy = "1";
+  button.disabled = true;
+  const previous = target.innerHTML;
+  target.innerHTML = `<div class="subtle">Checking GitHub…</div>`;
+  try {
+    const response = await fetch("/api/updates/check", { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || response.statusText);
+    state.snapshot = state.snapshot || {};
+    state.snapshot.updates = payload;
+    renderUpdates(payload);
+  } catch (error) {
+    target.innerHTML = `<div class="notice error">Update check failed: ${escapeHtml(error.message || String(error))}</div>${previous}`;
+  } finally {
+    delete button.dataset.busy;
+    button.disabled = false;
+  }
 }
 
 function renderServiceList(services) {
@@ -179,6 +240,13 @@ function renderOperatorNotes(snap) {
   const serviceStates = Object.entries(snap.services || {}).filter(([, value]) => value.state === "DEGRADED" || value.state === "NOT_PRESENT");
   serviceStates.forEach(([name, value]) => {
     notes.push(`${name} is ${value.state.replace("_", " ").toLowerCase()}.`);
+  });
+  ["console", "dragonsync"].forEach((key) => {
+    const info = snap.updates?.[key];
+    if (info?.update_available) {
+      const label = key === "console" ? "Console" : "DragonSync";
+      notes.push(`${label} update available — see Version tab.`);
+    }
   });
   if (!notes.length) {
     notes.push("No operator action flagged by the console.");

@@ -31,6 +31,9 @@ class Settings:
     dragonsync_service_name: str = "dragonsync.service"
     cert_upload_enabled: bool = True
     cert_upload_max_bytes: int = 256 * 1024
+    update_check_enabled: bool = True
+    console_upstream_repo: str = "alphafox02/wardragon-console"
+    dragonsync_upstream_repo: str = "alphafox02/DragonSync"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -57,6 +60,9 @@ class Settings:
             dragonsync_service_name=os.environ.get("WARDRAGON_DRAGONSYNC_SERVICE", "dragonsync.service"),
             cert_upload_enabled=_env_bool("WARDRAGON_CONSOLE_CERT_UPLOAD", True),
             cert_upload_max_bytes=_env_int("WARDRAGON_CONSOLE_CERT_MAX_BYTES", 256 * 1024),
+            update_check_enabled=_env_bool("WARDRAGON_CONSOLE_UPDATE_CHECK", True),
+            console_upstream_repo=os.environ.get("WARDRAGON_CONSOLE_UPSTREAM_REPO", "alphafox02/wardragon-console"),
+            dragonsync_upstream_repo=os.environ.get("WARDRAGON_DRAGONSYNC_UPSTREAM_REPO", "alphafox02/DragonSync"),
         )
 
     def can_write_config(self) -> bool:

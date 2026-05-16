@@ -395,6 +395,28 @@ select:disabled {
   color: var(--muted);
 }
 
+.update-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.update-row:last-of-type {
+  border-bottom: 0;
+}
+
+.update-row h3 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.update-repo {
+  margin-bottom: 6px;
+}
+
+.update-checked {
+  margin-top: 8px;
+}
+
 @media (max-width: 900px) {
   .grid.two,
   .grid.three {

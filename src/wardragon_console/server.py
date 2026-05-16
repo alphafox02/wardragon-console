@@ -14,6 +14,7 @@ from .config_view import read_config_files, write_config_file, write_curated_con
 from .certs import upload_tak_cert
 from .settings import Settings
 from .state import SnapshotStore, SourceTiming
+from .updates import check_for_updates
 
 LOG = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).with_name("static")
@@ -117,7 +118,7 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
-        if path in {"/api/actions/restart-dragonsync", "/api/certs/tak"} and not self._check_origin():
+        if path in {"/api/actions/restart-dragonsync", "/api/certs/tak", "/api/updates/check"} and not self._check_origin():
             self.send_error(HTTPStatus.FORBIDDEN, "cross-origin request rejected")
             return
         if path == "/api/actions/restart-dragonsync":
@@ -135,6 +136,19 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
 
         if path == "/api/certs/tak":
             self._handle_cert_upload()
+            return
+
+        if path == "/api/updates/check":
+            try:
+                result = check_for_updates(self.server.settings, self.server.store)
+            except PermissionError as exc:
+                self._write_json({"ok": False, "error": str(exc)}, status=403)
+                return
+            except Exception as exc:
+                LOG.exception("update check failed")
+                self._write_json({"ok": False, "error": str(exc)}, status=500)
+                return
+            self._write_json({"ok": True, **result})
             return
 
         self.send_error(HTTPStatus.NOT_FOUND)

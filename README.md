@@ -24,7 +24,7 @@ If you have not cloned it yet, drop the checkout next to DragonSync inside the W
 
 ```bash
 cd ~/WarDragon
-git clone <repo-url> WarDragon-Console
+git clone https://github.com/alphafox02/wardragon-console.git WarDragon-Console
 cd WarDragon-Console
 sudo packaging/install.sh
 ```
@@ -77,7 +77,12 @@ WARDRAGON_CONSOLE_TETHER_ENABLED=1
 WARDRAGON_CONSOLE_TETHER_CIDRS=192.168.42.0/24,192.168.43.0/24,172.20.10.0/28
 WARDRAGON_CONSOLE_REMOTE_CONFIG_WRITE=1
 WARDRAGON_CONSOLE_REMOTE_RESTART=0
+WARDRAGON_CONSOLE_UPDATE_CHECK=1
+WARDRAGON_CONSOLE_UPSTREAM_REPO=alphafox02/wardragon-console
+WARDRAGON_DRAGONSYNC_UPSTREAM_REPO=alphafox02/DragonSync
 ```
+
+The Version tab has a **Check for updates** button. It compares the local install to the configured upstream GitHub repos and tells you whether you are behind. It does not pull or apply anything — actually upgrading is still a manual `git pull && sudo packaging/install.sh`. Set `WARDRAGON_CONSOLE_UPDATE_CHECK=0` on air-gapped kits to disable the endpoint entirely.
 
 Config writes are only allowed by default when the server is bound to loopback. If a future tether/tablet mode exposes the console on a non-loopback address, config writes stay disabled unless `WARDRAGON_CONSOLE_REMOTE_CONFIG_WRITE=1` is set.
 
