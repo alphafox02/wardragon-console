@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WarDragon Console</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="brand">WarDragon Console</div>
+      <div class="subtle" id="kit-id">Kit unavailable</div>
+    </div>
+    <div class="top-metrics">
+      <div><span class="metric-value" id="drone-count">0</span><span class="metric-label">Drones</span></div>
+      <div><span class="metric-value" id="signal-count">0</span><span class="metric-label">Signals</span></div>
+      <div><span class="status-dot" id="overall-dot"></span><span id="overall-state">Starting</span></div>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Console sections">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="gps">GPS</button>
+    <button class="tab" data-tab="system">System</button>
+    <button class="tab" data-tab="receivers">Receivers</button>
+    <button class="tab" data-tab="drones">Drones</button>
+    <button class="tab" data-tab="signals">Signals</button>
+    <button class="tab" data-tab="config">Config</button>
+    <button class="tab" data-tab="about">Version</button>
+  </nav>
+
+  <main>
+    <section class="panel active" id="overview">
+      <div class="grid three">
+        <article class="card">
+          <h2>Kit</h2>
+          <dl id="kit-summary"></dl>
+        </article>
+        <article class="card">
+          <h2>Receiver Health</h2>
+          <div id="service-list" class="status-list"></div>
+        </article>
+        <article class="card">
+          <h2>Detection Activity</h2>
+          <dl id="activity-summary"></dl>
+        </article>
+      </div>
+      <div class="grid one overview-row">
+        <article class="card">
+          <h2>Operator Notes</h2>
+          <div id="operator-notes" class="note-list"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" id="gps">
+      <div class="grid one">
+        <article class="card">
+          <h2>Position</h2>
+          <dl id="gps-position"></dl>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" id="system">
+      <div class="grid two">
+        <article class="card">
+          <h2>System</h2>
+          <dl id="system-stats"></dl>
+        </article>
+        <article class="card">
+          <h2>Network</h2>
+          <dl id="network-stats"></dl>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" id="receivers">
+      <div class="grid two">
+        <article class="card">
+          <h2>droneid-go</h2>
+          <div id="droneid-sources" class="receiver-list"></div>
+        </article>
+        <article class="card">
+          <h2>DragonSig</h2>
+          <dl id="dragonsig-health"></dl>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" id="drones">
+      <article class="card table-card">
+        <h2>Current Drones</h2>
+        <div id="drones-table"></div>
+      </article>
+    </section>
+
+    <section class="panel" id="signals">
+      <article class="card table-card">
+        <h2>Current Signals</h2>
+        <div id="signals-table"></div>
+      </article>
+    </section>
+
+    <section class="panel" id="config">
+      <div class="config-toolbar">
+        <h2>DragonSync Config</h2>
+        <div class="toolbar-actions">
+          <button id="restart-dragonsync" class="secondary" type="button">Restart DragonSync</button>
+          <button id="write-toggle" class="secondary" type="button">Read/Write</button>
+        </div>
+      </div>
+      <div id="config-status" class="notice"></div>
+      <article class="config-editor" id="cert-upload">
+        <div class="config-header">
+          <div>
+            <h2>TAK Certificate Upload</h2>
+            <div class="config-path">Stored under DragonSync certs/ and written to config.ini as an absolute path.</div>
+          </div>
+        </div>
+        <div class="cert-grid">
+          <label class="form-field">
+            <span>Certificate type</span>
+            <select id="cert-role">
+              <option value="tak_p12">TAK PKCS#12 (.p12/.pfx)</option>
+              <option value="tak_cert">TAK PEM certificate</option>
+              <option value="tak_key">TAK PEM private key</option>
+              <option value="tak_ca">TAK CA certificate</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>PKCS#12 password</span>
+            <div class="password-wrap">
+              <input id="cert-password" type="password" autocomplete="off">
+              <button type="button" data-reveal="cert-password">Show</button>
+            </div>
+          </label>
+          <label class="form-field cert-file-field">
+            <span>File</span>
+            <input id="cert-file" type="file" accept=".p12,.pfx,.pem,.crt,.cer,.key">
+          </label>
+          <button id="upload-cert" type="button">Upload</button>
+        </div>
+      </article>
+      <div id="config-files" class="config-files"></div>
+    </section>
+
+    <section class="panel" id="about">
+      <div class="grid one">
+        <article class="card">
+          <h2>Version</h2>
+          <dl id="version-info"></dl>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

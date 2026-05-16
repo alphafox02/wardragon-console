@@ -1,0 +1,25 @@
+[Unit]
+Description=WarDragon mDNS alias publisher (wardragon.local)
+After=avahi-daemon.service
+Requires=avahi-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wardragon-avahi-alias wardragon.local
+Restart=on-failure
+RestartSec=5
+# Hardening. This process only talks to the system dbus and exits cleanly.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

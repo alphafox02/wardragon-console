@@ -1,0 +1,1 @@
+dragon ALL=(root) NOPASSWD: /bin/systemctl restart dragonsync.service

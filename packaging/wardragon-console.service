@@ -1,0 +1,38 @@
+[Unit]
+Description=WarDragon Console
+After=network.target zmq-decoder.service wardragon-monitor.service dragonsync.service
+Wants=zmq-decoder.service wardragon-monitor.service dragonsync.service
+
+[Service]
+Type=simple
+User=dragon
+Group=dragon
+Environment=WARDRAGON_CONSOLE_HOST=127.0.0.1
+Environment=WARDRAGON_CONSOLE_PORT=4280
+Environment=WARDRAGON_CONSOLE_CONFIG_WRITE=1
+Environment=WARDRAGON_CONSOLE_REMOTE_CONFIG_WRITE=1
+Environment=WARDRAGON_CONSOLE_REMOTE_RESTART=0
+Environment=WARDRAGON_CONSOLE_TETHER_ENABLED=1
+Environment=WARDRAGON_CONSOLE_TETHER_PORT=4280
+Environment=WARDRAGON_CONSOLE_TETHER_CIDRS=192.168.42.0/24,192.168.43.0/24,172.20.10.0/28
+ExecStart=/usr/local/bin/wardragon-console
+Restart=on-failure
+RestartSec=5
+
+# Hardening. NoNewPrivileges is deliberately NOT set: the console uses sudo to
+# restart dragonsync.service through the narrow sudoers rule, and that requires
+# the ability to gain privileges via setuid.
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/dragon/WarDragon/DragonSync
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

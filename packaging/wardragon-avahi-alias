@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Publish additional mDNS CNAME aliases via the running avahi-daemon.
+
+Each argument is a fully-qualified .local name (e.g. wardragon.local) that
+will be published as a CNAME pointing at this host's existing avahi FQDN.
+Re-publishes automatically if avahi-daemon restarts.
+"""
+from __future__ import annotations
+
+import signal
+import sys
+
+import dbus
+from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib
+
+DBUS_NAME = "org.freedesktop.Avahi"
+DBUS_PATH_SERVER = "/"
+IFACE_SERVER = "org.freedesktop.Avahi.Server"
+IFACE_ENTRY_GROUP = "org.freedesktop.Avahi.EntryGroup"
+IF_UNSPEC = -1
+PROTO_UNSPEC = -1
+CLASS_IN = 0x01
+TYPE_CNAME = 0x05
+TTL = 60
+SERVER_RUNNING = 2
+
+
+def encode_dns_name(name: str) -> dbus.Array:
+    out: list[int] = []
+    for label in name.split("."):
+        if not label:
+            continue
+        encoded = label.encode("ascii")
+        out.append(len(encoded))
+        out.extend(encoded)
+    out.append(0)
+    return dbus.Array([dbus.Byte(b) for b in out], signature="y")
+
+
+def main() -> int:
+    aliases = sys.argv[1:]
+    if not aliases:
+        print("usage: wardragon-avahi-alias <alias.local>...", file=sys.stderr)
+        return 2
+
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+    server = dbus.Interface(
+        bus.get_object(DBUS_NAME, DBUS_PATH_SERVER),
+        IFACE_SERVER,
+    )
+
+    state: dict[str, object] = {"group": None}
+
+    def republish() -> None:
+        old = state.get("group")
+        if old is not None:
+            try:
+                old.Reset()
+            except dbus.DBusException:
+                pass
+        try:
+            fqdn = server.GetHostNameFqdn()
+            group_path = server.EntryGroupNew()
+            group = dbus.Interface(bus.get_object(DBUS_NAME, group_path), IFACE_ENTRY_GROUP)
+            rdata = encode_dns_name(fqdn)
+            for alias in aliases:
+                group.AddRecord(
+                    IF_UNSPEC, PROTO_UNSPEC, dbus.UInt32(0),
+                    alias, CLASS_IN, TYPE_CNAME, TTL, rdata,
+                )
+            group.Commit()
+            state["group"] = group
+            for alias in aliases:
+                print(f"published CNAME {alias} -> {fqdn}", flush=True)
+        except dbus.DBusException as exc:
+            print(f"avahi publish failed: {exc}", file=sys.stderr, flush=True)
+
+    def on_state(value, _error):
+        if int(value) == SERVER_RUNNING:
+            republish()
+
+    server.connect_to_signal("StateChanged", on_state)
+    republish()
+
+    loop = GLib.MainLoop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda *_: loop.quit())
+    loop.run()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
