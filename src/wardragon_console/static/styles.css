@@ -470,7 +470,15 @@ select:disabled {
   }
 
   .tabs {
-    padding: 8px 12px 0;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding: 8px 12px;
+  }
+
+  .tab {
+    flex: 1 1 calc(50% - 4px);
+    border-radius: 6px;
+    min-width: 94px;
   }
 
   button {

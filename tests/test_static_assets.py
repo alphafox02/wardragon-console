@@ -19,3 +19,10 @@ def test_mobile_tables_have_cell_labels() -> None:
 
     assert 'data-label="${escapeAttr(headers[index] || "")}"' in script
     assert "content: attr(data-label)" in styles
+
+
+def test_narrow_tabs_wrap_instead_of_requiring_horizontal_scroll() -> None:
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "flex-wrap: wrap" in styles
+    assert "overflow-x: visible" in styles
