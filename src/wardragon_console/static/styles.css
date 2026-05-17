@@ -22,6 +22,7 @@ body {
   color: var(--ink);
   font-family: Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
   line-height: 1.45;
+  min-width: 0;
 }
 
 .topbar {
@@ -65,6 +66,7 @@ body {
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
+  scrollbar-gutter: stable;
 }
 
 button {
@@ -83,9 +85,11 @@ button:hover {
 }
 
 .tab {
+  flex: 0 0 auto;
   border-bottom-color: transparent;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
+  white-space: nowrap;
 }
 
 .tab.active {
@@ -243,6 +247,7 @@ td {
   padding: 9px 8px;
   text-align: left;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 th {
@@ -363,6 +368,7 @@ textarea[readonly] {
 input,
 select {
   width: 100%;
+  min-width: 0;
   min-height: 36px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -432,6 +438,10 @@ select:disabled {
     width: 100%;
     justify-content: space-between;
   }
+
+  .cert-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 520px) {
@@ -441,17 +451,158 @@ select:disabled {
 
   .topbar {
     padding: 14px;
+    gap: 12px;
+  }
+
+  .brand {
+    font-size: 1.1rem;
+  }
+
+  .top-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    white-space: normal;
+  }
+
+  .metric-value {
+    font-size: 1.1rem;
+  }
+
+  .tabs {
+    padding: 8px 12px 0;
+  }
+
+  button {
+    min-height: 40px;
+    padding: 0 11px;
+  }
+
+  .card,
+  .config-editor {
+    padding: 12px;
+    box-shadow: none;
   }
 
   dl {
     grid-template-columns: 1fr;
+    gap: 2px 0;
   }
 
   .config-grid {
     grid-template-columns: 1fr;
   }
 
+  .config-toolbar,
+  .config-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar-actions {
+    justify-content: stretch;
+  }
+
+  .toolbar-actions button,
+  .config-header button,
+  #upload-cert {
+    width: 100%;
+  }
+
   .cert-grid {
     grid-template-columns: 1fr;
   }
+
+  .status-row,
+  .receiver-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .status-row .pill,
+  .receiver-row .pill {
+    grid-column: 2;
+    justify-self: start;
+    white-space: normal;
+  }
+
+  .table-card {
+    overflow-x: visible;
+  }
+
+  table,
+  thead,
+  tbody,
+  tr,
+  td {
+    display: block;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tr {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+
+  td {
+    display: grid;
+    grid-template-columns: minmax(86px, 0.45fr) minmax(0, 1fr);
+    gap: 8px;
+    border-bottom: 1px solid var(--line);
+    padding: 8px 10px;
+  }
+
+  td:last-child {
+    border-bottom: 0;
+  }
+
+  td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-weight: 600;
+  }
+}
+
+@media (max-width: 360px) {
+  .top-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .password-wrap {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 480px) {
+  .topbar {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  main {
+    padding-top: 12px;
+  }
+}
+
+.compact-screen .card,
+.compact-screen .config-editor {
+  box-shadow: none;
+}
+
+.compact-screen .topbar {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.compact-screen .tabs {
+  padding-top: 8px;
+}
+
+.compact-screen main {
+  padding-top: 12px;
 }

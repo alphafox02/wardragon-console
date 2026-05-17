@@ -5,6 +5,19 @@ const state = {
   restartNeeded: false,
 };
 
+const compactViewportQuery = window.matchMedia("(max-width: 520px), (max-height: 480px), (max-width: 760px) and (max-height: 560px)");
+
+function updateViewportMode() {
+  document.documentElement.classList.toggle("compact-screen", compactViewportQuery.matches);
+}
+
+if (compactViewportQuery.addEventListener) {
+  compactViewportQuery.addEventListener("change", updateViewportMode);
+} else {
+  compactViewportQuery.addListener(updateViewportMode);
+}
+updateViewportMode();
+
 const fmt = {
   number(value, digits = 1) {
     const num = Number(value);
@@ -490,7 +503,7 @@ function renderDl(id, values) {
 
 function table(headers, rows) {
   return `<table><thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${
-    rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(display(cell))}</td>`).join("")}</tr>`).join("")
+    rows.map((row) => `<tr>${row.map((cell, index) => `<td data-label="${escapeAttr(headers[index] || "")}">${escapeHtml(display(cell))}</td>`).join("")}</tr>`).join("")
   }</tbody></table>`;
 }
 
