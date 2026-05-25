@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from .actions import restart_dragonsync
 from .config_view import read_config_files, write_config_file, write_curated_config
 from .certs import upload_tak_cert
+from .dragonscope import read_dragonscope, write_dragonscope
 from .settings import Settings
 from .state import SnapshotStore, SourceTiming
 from .updates import check_for_updates
@@ -74,6 +75,9 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             include_raw = self.server.settings.is_local_bind()
             self._write_json(read_config_files(self.server.settings, include_raw=include_raw))
             return
+        if path == "/api/dragonscope/config":
+            self._write_json(read_dragonscope(self.server.settings))
+            return
         if path == "/api/health":
             self._write_json({"ok": True, "bind": f"{self.server.settings.bind_host}:{self.server.settings.bind_port}"})
             return
@@ -84,13 +88,18 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self) -> None:
         parsed = urlparse(self.path)
-        if not parsed.path.startswith("/api/config/"):
-            self.send_error(HTTPStatus.NOT_FOUND)
+        if parsed.path.startswith("/api/config/"):
+            self._handle_config_put(parsed.path.removeprefix("/api/config/"))
             return
+        if parsed.path == "/api/dragonscope/config":
+            self._handle_dragonscope_put()
+            return
+        self.send_error(HTTPStatus.NOT_FOUND)
+
+    def _handle_config_put(self, name: str) -> None:
         if not self._check_origin():
             self.send_error(HTTPStatus.FORBIDDEN, "cross-origin request rejected")
             return
-        name = parsed.path.removeprefix("/api/config/")
         length = self._read_content_length(256 * 1024)
         if length is None:
             return
@@ -111,6 +120,31 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             return
         except Exception as exc:
             LOG.exception("config write failed")
+            self._write_json({"ok": False, "error": str(exc)}, status=500)
+            return
+        self._write_json(result)
+
+    def _handle_dragonscope_put(self) -> None:
+        if not self._check_origin():
+            self.send_error(HTTPStatus.FORBIDDEN, "cross-origin request rejected")
+            return
+        length = self._read_content_length(64 * 1024)
+        if length is None:
+            return
+        raw_body = self.rfile.read(length).decode("utf-8")
+        try:
+            payload = json.loads(raw_body)
+            if not isinstance(payload, dict):
+                raise ValueError("JSON body must be an object")
+            result = write_dragonscope(self.server.settings, payload)
+        except PermissionError as exc:
+            self._write_json({"ok": False, "error": str(exc)}, status=403)
+            return
+        except ValueError as exc:
+            self._write_json({"ok": False, "error": str(exc)}, status=400)
+            return
+        except Exception as exc:
+            LOG.exception("dragonscope write failed")
             self._write_json({"ok": False, "error": str(exc)}, status=500)
             return
         self._write_json(result)

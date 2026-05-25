@@ -11,10 +11,11 @@ Environment=WARDRAGON_CONSOLE_HOST=127.0.0.1
 Environment=WARDRAGON_CONSOLE_PORT=4280
 Environment=WARDRAGON_CONSOLE_CONFIG_WRITE=1
 Environment=WARDRAGON_CONSOLE_REMOTE_CONFIG_WRITE=1
-Environment=WARDRAGON_CONSOLE_REMOTE_RESTART=0
+Environment=WARDRAGON_CONSOLE_REMOTE_RESTART=1
 Environment=WARDRAGON_CONSOLE_TETHER_ENABLED=1
 Environment=WARDRAGON_CONSOLE_TETHER_PORT=4280
 Environment=WARDRAGON_CONSOLE_TETHER_CIDRS=192.168.42.0/24,192.168.43.0/24,172.20.10.0/28
+Environment=WARDRAGON_DRAGONSCOPE_DIR=/home/dragon/WarDragon/dragonsdr_dji_droneid
 ExecStart=/usr/local/bin/wardragon-console
 Restart=on-failure
 RestartSec=5
@@ -25,6 +26,7 @@ RestartSec=5
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/home/dragon/WarDragon/DragonSync
+ReadWritePaths=/home/dragon/WarDragon/dragonsdr_dji_droneid
 PrivateTmp=true
 ProtectKernelTunables=true
 ProtectKernelModules=true

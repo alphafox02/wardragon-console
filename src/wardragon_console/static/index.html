@@ -27,6 +27,7 @@
     <button class="tab" data-tab="drones">Drones</button>
     <button class="tab" data-tab="signals">Signals</button>
     <button class="tab" data-tab="config">Config</button>
+    <button class="tab" data-tab="dragonscope">DragonScope</button>
     <button class="tab" data-tab="about">Version</button>
   </nav>
 
@@ -144,6 +145,25 @@
         </div>
       </article>
       <div id="config-files" class="config-files"></div>
+    </section>
+
+    <section class="panel" id="dragonscope">
+      <div class="config-toolbar">
+        <h2>DragonScope</h2>
+        <div class="toolbar-actions">
+          <button id="dragonscope-save" type="button">Save</button>
+        </div>
+      </div>
+      <div id="dragonscope-status" class="notice"></div>
+      <article class="config-editor" id="dragonscope-card">
+        <div class="config-header">
+          <div>
+            <h2 id="dragonscope-title">dragonscope.cfg</h2>
+            <div class="config-path" id="dragonscope-path"></div>
+          </div>
+        </div>
+        <div id="dragonscope-form"></div>
+      </article>
     </section>
 
     <section class="panel" id="about">

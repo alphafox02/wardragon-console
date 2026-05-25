@@ -1,6 +1,7 @@
 const state = {
   snapshot: null,
   config: null,
+  dragonscope: null,
   writeMode: false,
   restartNeeded: false,
 };
@@ -62,6 +63,7 @@ document.querySelectorAll(".tab").forEach((button) => {
     button.classList.add("active");
     document.getElementById(button.dataset.tab).classList.add("active");
     if (button.dataset.tab === "config") loadConfig();
+    if (button.dataset.tab === "dragonscope") loadDragonscope();
   });
 });
 
@@ -73,6 +75,7 @@ document.getElementById("write-toggle").addEventListener("click", () => {
 document.getElementById("restart-dragonsync").addEventListener("click", restartDragonSync);
 document.getElementById("upload-cert").addEventListener("click", uploadCertificate);
 document.getElementById("check-updates").addEventListener("click", checkForUpdates);
+document.getElementById("dragonscope-save").addEventListener("click", saveDragonscope);
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-reveal]");
   if (!button) return;
@@ -101,6 +104,84 @@ async function loadConfig() {
     const notice = document.getElementById("config-status");
     notice.className = "notice error";
     notice.textContent = `Config unavailable: ${error}`;
+  }
+}
+
+async function loadDragonscope() {
+  const notice = document.getElementById("dragonscope-status");
+  try {
+    const response = await fetch("/api/dragonscope/config", { cache: "no-store" });
+    state.dragonscope = await response.json();
+    renderDragonscope();
+  } catch (error) {
+    notice.className = "notice error";
+    notice.textContent = `DragonScope config unavailable: ${error}`;
+  }
+}
+
+function renderDragonscope() {
+  const ds = state.dragonscope;
+  if (!ds) return;
+  const notice = document.getElementById("dragonscope-status");
+  const saveButton = document.getElementById("dragonscope-save");
+  saveButton.disabled = !ds.write_allowed;
+  document.getElementById("dragonscope-path").textContent = ds.path || "";
+
+  if (ds.error) {
+    notice.className = "notice error";
+    notice.textContent = `Existing file: ${ds.error}`;
+  } else if (!ds.exists) {
+    notice.className = "notice";
+    notice.textContent = `${ds.path} does not exist yet. Save will create it.`;
+  } else if (!ds.write_allowed) {
+    notice.className = "notice";
+    notice.textContent = "Read-only: config writes are disabled for this bind mode.";
+  } else {
+    notice.className = "notice";
+    notice.textContent = `DragonScope re-reads this file every ~${ds.auto_reload_seconds || 30}s. No restart needed.`;
+  }
+
+  const form = ds.form || { groups: [] };
+  document.getElementById("dragonscope-form").innerHTML = form.groups
+    .map((group) => renderConfigGroup("dragonscope.cfg", group, ds.write_allowed))
+    .join("");
+}
+
+async function saveDragonscope() {
+  const button = document.getElementById("dragonscope-save");
+  const notice = document.getElementById("dragonscope-status");
+  if (button.dataset.busy === "1") return;
+  button.dataset.busy = "1";
+  button.disabled = true;
+  const values = {};
+  document.querySelectorAll('[data-config-file="dragonscope.cfg"]').forEach((input) => {
+    if (input.type === "checkbox") {
+      values[input.dataset.key] = input.checked;
+    } else {
+      values[input.dataset.key] = input.value;
+    }
+  });
+  try {
+    const response = await fetch("/api/dragonscope/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || response.statusText);
+    notice.className = "notice ok";
+    if (payload.unchanged) {
+      notice.textContent = "dragonscope.cfg: no changes to save";
+    } else {
+      notice.textContent = `Saved ${payload.path}${payload.backup_path ? ` · backup ${payload.backup_path}` : ""} · DragonScope will pick it up within 30s`;
+    }
+    await loadDragonscope();
+  } catch (error) {
+    notice.className = "notice error";
+    notice.textContent = `Save failed: ${error.message || error}`;
+  } finally {
+    delete button.dataset.busy;
+    button.disabled = false;
   }
 }
 

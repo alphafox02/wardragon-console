@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 DEFAULT_DRAGONSYNC_DIR = Path("/home/dragon/WarDragon/DragonSync")
+DEFAULT_DRAGONSCOPE_DIR = Path("/home/dragon/WarDragon/dragonsdr_dji_droneid")
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,7 @@ class Settings:
     bind_port: int = 4280
     dragonsync_url: str = "http://127.0.0.1:8088"
     dragonsync_dir: Path = DEFAULT_DRAGONSYNC_DIR
+    dragonscope_dir: Path = DEFAULT_DRAGONSCOPE_DIR
     monitor_endpoint: str = "tcp://127.0.0.1:4225"
     droneid_health_endpoint: str = "tcp://127.0.0.1:4227"
     dragonsig_health_endpoint: str = "tcp://127.0.0.1:4228"
@@ -38,11 +40,13 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         dragonsync_dir = Path(os.environ.get("WARDRAGON_DRAGONSYNC_DIR", str(DEFAULT_DRAGONSYNC_DIR)))
+        dragonscope_dir = Path(os.environ.get("WARDRAGON_DRAGONSCOPE_DIR", str(DEFAULT_DRAGONSCOPE_DIR)))
         return cls(
             bind_host=os.environ.get("WARDRAGON_CONSOLE_HOST", "127.0.0.1"),
             bind_port=_env_int("WARDRAGON_CONSOLE_PORT", 4280),
             dragonsync_url=os.environ.get("WARDRAGON_DRAGONSYNC_URL", "http://127.0.0.1:8088").rstrip("/"),
             dragonsync_dir=dragonsync_dir,
+            dragonscope_dir=dragonscope_dir,
             monitor_endpoint=os.environ.get("WARDRAGON_MONITOR_ZMQ", "tcp://127.0.0.1:4225"),
             droneid_health_endpoint=os.environ.get("WARDRAGON_DRONEID_HEALTH_ZMQ", "tcp://127.0.0.1:4227"),
             dragonsig_health_endpoint=os.environ.get("WARDRAGON_DRAGONSIG_HEALTH_ZMQ", "tcp://127.0.0.1:4228"),
