@@ -20,12 +20,12 @@ The console does not subscribe to high-rate drone/signal ZMQ ports and does not 
 
 ## Install on a kit
 
-If you have not cloned it yet, drop the checkout next to DragonSync inside the WarDragon directory and run the installer:
+If you have not cloned it yet, drop the checkout next to DragonSync inside the WarDragon directory and run the installer. The directory name is **lowercase** `wardragon-console`, matching the repo name and the on-kit install path under `/opt`:
 
 ```bash
 cd ~/WarDragon
-git clone https://github.com/alphafox02/wardragon-console.git WarDragon-Console
-cd WarDragon-Console
+git clone https://github.com/alphafox02/wardragon-console.git
+cd wardragon-console
 sudo packaging/install.sh
 ```
 
