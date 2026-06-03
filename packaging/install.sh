@@ -56,12 +56,31 @@ if [[ -z "${DRAGONSYNC_DIR}" ]]; then
   DRAGONSYNC_DIR="${DRAGONSYNC_DIR:-${DEFAULT_DRAGONSYNC_DIR}}"
 fi
 
-# DragonScope lives in its own directory. Newer kits use dragonsdr_dji_droneid;
-# older kits still have antsdr_dji_droneid. Auto-pick whichever exists, or
-# default to the new name (the file will simply be reported as missing in
-# the UI until the directory exists).
+# DragonScope lives in its own directory. The naming convention switched
+# from antsdr_dji_droneid (legacy) to dragonsdr_dji_droneid (current), and
+# both can exist side-by-side on a transitioning kit. To pick the right one
+# we ask systemd which directory the running dragonscope.service actually
+# uses. Operator override via WARDRAGON_DRAGONSCOPE_DIR wins over all.
 DRAGONSCOPE_DIR="${WARDRAGON_DRAGONSCOPE_DIR:-}"
-if [[ -z "${DRAGONSCOPE_DIR}" ]]; then
+if [[ -z "${DRAGONSCOPE_DIR}" ]] && command -v systemctl >/dev/null 2>&1; then
+  unit_path=$(systemctl show -p FragmentPath dragonscope.service --value 2>/dev/null || true)
+  if [[ -n "${unit_path}" && -f "${unit_path}" ]]; then
+    exec_line=$(grep -m1 '^ExecStart=' "${unit_path}" 2>/dev/null | sed 's|^ExecStart=||')
+    for token in ${exec_line}; do
+      case "${token}" in
+        */dragonscope*.py)
+          DRAGONSCOPE_DIR=$(dirname "${token}")
+          break
+          ;;
+      esac
+    done
+    if [[ -z "${DRAGONSCOPE_DIR}" ]]; then
+      wd=$(systemctl show -p WorkingDirectory dragonscope.service --value 2>/dev/null || true)
+      [[ -n "${wd}" && -d "${wd}" ]] && DRAGONSCOPE_DIR="${wd}"
+    fi
+  fi
+fi
+if [[ -z "${DRAGONSCOPE_DIR}" || ! -d "${DRAGONSCOPE_DIR}" ]]; then
   for candidate in \
     "${TARGET_HOME}/WarDragon/dragonsdr_dji_droneid" \
     "${TARGET_HOME}/WarDragon/antsdr_dji_droneid"; do
