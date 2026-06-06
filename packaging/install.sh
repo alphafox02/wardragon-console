@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="/opt/wardragon-console"
 BIN_PATH="/usr/local/bin/wardragon-console"
 ALIAS_BIN_PATH="/usr/local/bin/wardragon-avahi-alias"
+TETHER_ALIAS_PATH="/usr/local/bin/wardragon-tether-alias"
 SERVICE_PATH="/etc/systemd/system/wardragon-console.service"
 ALIAS_SERVICE_PATH="/etc/systemd/system/wardragon-avahi-alias.service"
 SUDOERS_PATH="/etc/sudoers.d/wardragon-console"
@@ -142,6 +143,7 @@ rm -f "${unit_tmp}"
 
 install -o root -g root -m 0755 "${ROOT_DIR}/packaging/wardragon-avahi-alias" "${ALIAS_BIN_PATH}"
 install -o root -g root -m 0644 "${ROOT_DIR}/packaging/wardragon-avahi-alias.service" "${ALIAS_SERVICE_PATH}"
+install -o root -g root -m 0755 "${ROOT_DIR}/packaging/wardragon-tether-alias" "${TETHER_ALIAS_PATH}"
 
 sudoers_tmp=$(mktemp)
 sed "s|^dragon |${TARGET_USER} |" "${ROOT_DIR}/packaging/sudoers-wardragon-console" > "${sudoers_tmp}"

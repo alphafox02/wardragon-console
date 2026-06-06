@@ -28,6 +28,13 @@ class Settings:
     tether_port: int = 4280
     tether_poll_seconds: float = 3.0
     tether_cidrs: tuple[str, ...] = ("192.168.42.0/24", "192.168.43.0/24", "172.20.10.0/28")
+    # Optional stable-URL feature for shipped tablets. Each entry is
+    # (network, alias_ip). When a tether comes up with an IP inside `network`,
+    # the console adds `alias_ip` as a secondary address on that interface and
+    # opens a second listener on it, so the customer URL stays the same across
+    # replugs/reboots. iOS lands in 172.20.10.0/28 by Apple convention so no
+    # profile is needed there — Safari handles .local natively.
+    tether_claim_profiles: tuple[tuple[str, str], ...] = (("10.152.47.0/24", "10.152.47.250"),)
     restart_enabled: bool = True
     allow_remote_restart: bool = False
     dragonsync_service_name: str = "dragonsync.service"
@@ -59,6 +66,10 @@ class Settings:
             tether_port=_env_int("WARDRAGON_CONSOLE_TETHER_PORT", 4280),
             tether_poll_seconds=_env_float("WARDRAGON_CONSOLE_TETHER_POLL_SECONDS", 3.0),
             tether_cidrs=_env_tuple("WARDRAGON_CONSOLE_TETHER_CIDRS", ("192.168.42.0/24", "192.168.43.0/24", "172.20.10.0/28")),
+            tether_claim_profiles=_env_claim_profiles(
+                "WARDRAGON_CONSOLE_TETHER_CLAIM_PROFILES",
+                (("10.152.47.0/24", "10.152.47.250"),),
+            ),
             restart_enabled=_env_bool("WARDRAGON_CONSOLE_RESTART_ENABLED", True),
             allow_remote_restart=_env_bool("WARDRAGON_CONSOLE_REMOTE_RESTART", False),
             dragonsync_service_name=os.environ.get("WARDRAGON_DRAGONSYNC_SERVICE", "dragonsync.service"),
@@ -114,3 +125,30 @@ def _env_tuple(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
         return default
     parts = tuple(part.strip() for part in value.split(",") if part.strip())
     return parts or default
+
+
+def _env_claim_profiles(
+    name: str, default: tuple[tuple[str, str], ...]
+) -> tuple[tuple[str, str], ...]:
+    """Parse WARDRAGON_CONSOLE_TETHER_CLAIM_PROFILES.
+
+    Format: ``network=alias_ip,network=alias_ip,...`` — for example
+    ``10.152.47.0/24=10.152.47.250``. Unset uses the built-in default
+    (Samsung tether). Set-but-empty (`""`) disables the feature entirely.
+    """
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    if not value.strip():
+        return ()
+    profiles: list[tuple[str, str]] = []
+    for entry in value.split(","):
+        entry = entry.strip()
+        if not entry or "=" not in entry:
+            continue
+        network, alias = entry.split("=", 1)
+        network = network.strip()
+        alias = alias.strip()
+        if network and alias:
+            profiles.append((network, alias))
+    return tuple(profiles)

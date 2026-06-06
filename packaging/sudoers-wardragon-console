@@ -1,1 +1,2 @@
 dragon ALL=(root) NOPASSWD: /bin/systemctl restart dragonsync.service
+dragon ALL=(root) NOPASSWD: /usr/local/bin/wardragon-tether-alias *

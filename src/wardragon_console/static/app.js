@@ -323,7 +323,9 @@ function renderServiceList(services) {
 
 function renderOperatorNotes(snap) {
   const notes = [];
-  if (snap.access?.tether?.url) {
+  if (snap.access?.tether?.stable_url) {
+    notes.push(`Tablet stable URL: ${snap.access.tether.stable_url} (preferred for shipped tablets)`);
+  } else if (snap.access?.tether?.url) {
     notes.push(`Tablet tether access is available at ${snap.access.tether.url}`);
   } else if (snap.access?.tether?.enabled) {
     notes.push("No USB tether detected. Use the local display at http://localhost:4280/ or try wardragon.local after tethering.");
@@ -642,6 +644,9 @@ function networkValues(interfaces, access) {
     "Local URL": access?.local_url || "http://127.0.0.1:4280/",
     "Tablet URL": access?.tether?.url || "No tether detected",
   };
+  if (access?.tether?.stable_url) {
+    values["Stable tablet URL"] = access.tether.stable_url;
+  }
   interfaces.forEach((iface) => {
     values[iface.name] = `${iface.ipv4}${iface.tether_kind ? ` · ${iface.tether_kind}` : ""}`;
   });

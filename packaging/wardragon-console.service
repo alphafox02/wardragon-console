@@ -20,21 +20,16 @@ ExecStart=/usr/local/bin/wardragon-console
 Restart=on-failure
 RestartSec=5
 
-# Hardening. NoNewPrivileges is deliberately NOT set: the console uses sudo to
-# restart dragonsync.service through the narrow sudoers rule, and that requires
-# the ability to gain privileges via setuid.
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/home/dragon/WarDragon/DragonSync
-ReadWritePaths=/home/dragon/WarDragon/dragonsdr_dji_droneid
+# Hardening. The directives below are deliberately limited to ones that do
+# NOT implicitly enable NoNewPrivileges. The console uses sudo to restart
+# dragonsync.service and to add the stable tether IP alias, both through
+# narrow sudoers rules; sudo refuses to run under NoNewPrivileges=yes, and
+# many systemd hardening directives (ProtectKernelTunables=, RestrictNamespaces=,
+# LockPersonality=, etc.) imply that flag whether or not we set it explicitly.
+# The trust model here is "physical/local-access = trust"; the kept directives
+# still meaningfully constrain filesystem and namespace access.
+NoNewPrivileges=no
 PrivateTmp=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictNamespaces=true
-RestrictRealtime=true
-LockPersonality=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

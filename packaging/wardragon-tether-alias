@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# wardragon-tether-alias: add or remove a secondary IP on a USB tether
+# interface. Called from the console process via the narrow sudoers rule.
+# This is the only thing in the install that performs privileged network
+# changes beyond systemctl restart, so the validation here is deliberately
+# strict: the trust boundary is in this script, not in sudoers wildcards.
+#
+# usage: wardragon-tether-alias add|del <iface> <ipv4/prefix>
+set -euo pipefail
+
+action="${1:-}"
+iface="${2:-}"
+cidr="${3:-}"
+
+case "${action}" in
+  add|del) ;;
+  *) echo "action must be 'add' or 'del'" >&2; exit 2 ;;
+esac
+
+# Interface name must look USB-tether-shaped. This is the line of defence
+# against ever touching eth0 / wlan0 / enp1s0 (AntSDR link) / etc.
+if [[ ! "${iface}" =~ ^(usb[0-9]+|enx[0-9a-f]{12}|rndis[0-9]+|ipheth[0-9]+)$ ]]; then
+  echo "iface '${iface}' is not a tether-shaped name" >&2
+  exit 3
+fi
+
+# CIDR must be IPv4 with explicit prefix length.
+if [[ ! "${cidr}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/([0-9]+)$ ]]; then
+  echo "cidr '${cidr}' is not <ipv4>/<prefix>" >&2
+  exit 4
+fi
+a="${BASH_REMATCH[1]}"
+b="${BASH_REMATCH[2]}"
+c="${BASH_REMATCH[3]}"
+d="${BASH_REMATCH[4]}"
+prefix="${BASH_REMATCH[5]}"
+
+for octet in "${a}" "${b}" "${c}" "${d}"; do
+  if (( octet < 0 || octet > 255 )); then
+    echo "cidr '${cidr}' has out-of-range octet" >&2
+    exit 4
+  fi
+done
+if (( prefix < 8 || prefix > 30 )); then
+  echo "prefix /${prefix} outside 8..30" >&2
+  exit 5
+fi
+
+# RFC1918 only. Public addresses are blocked.
+private=false
+if [[ "${a}" -eq 10 ]]; then private=true; fi
+if [[ "${a}" -eq 172 && "${b}" -ge 16 && "${b}" -le 31 ]]; then private=true; fi
+if [[ "${a}" -eq 192 && "${b}" -eq 168 ]]; then private=true; fi
+if ! "${private}"; then
+  echo "cidr '${cidr}' is not RFC1918" >&2
+  exit 6
+fi
+
+# Block the AntSDR private link explicitly.
+if [[ "${a}.${b}.${c}" == "172.31.100" ]]; then
+  echo "172.31.100/24 is reserved for the AntSDR link" >&2
+  exit 7
+fi
+
+exec /sbin/ip addr "${action}" "${cidr}" dev "${iface}"
