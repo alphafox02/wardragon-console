@@ -157,10 +157,10 @@ The reliability of each path depends on the tablet OS. **Honest summary up front
 
 1. **iPhone/iPad over USB tether or Wi-Fi:** Safari resolves `.local` via Bonjour natively. Open `http://wardragon.local:4280/`. Done.
 2. **Android over Wi-Fi (not USB tether):** mDNS works in that direction. Use Firefox for Android (honors `.local`) or install a discovery app like *Service Browser* (Druk1) and tap *"WarDragon Console on dragon"*. Chrome on Android does not resolve `.local`.
-3. **Android over USB tether (the headless-kit shipping case):** type the **stable URL** `http://10.152.47.250:4280/` directly in Chrome. This is why the static IP alias profile exists; print it on a label or QR sticker on the kit so the customer never needs to discover the IP.
+3. **Android over USB tether (the headless-kit shipping case):** type the **stable URL** `http://10.152.47.250:4280/` directly in Chrome. This is why the static IP alias profile exists — the URL is fixed across replugs and reboots, so the customer just has it from the docs.
 4. **Anywhere, mDNS fails:** the Overview and System tabs show the current tether URL (dynamic and stable) once you reach the console once. Bookmark either.
 
-The Overview tab also shows the **stable URL** prominently in operator notes whenever a claim profile is active, so an operator reading the kit display via HDMI has the one-line answer for what to tell the customer.
+The Overview tab also shows the **stable URL** prominently in operator notes whenever a claim profile is active, so an operator reading the kit display via HDMI sees the current customer URL right there.
 
 ### Trust model
 
@@ -171,7 +171,7 @@ Physical access to the kit = full trust. The packaged service enables remote con
 For a no-screen kit, in priority order:
 
 1. USB tether listener is auto-enabled (default in the packaged unit).
-2. If the customer tablet is in your shipping bundle, **print the stable URL on the kit** (label or QR sticker). With the default claim profile and a Samsung tablet, that URL is `http://10.152.47.250:4280/`. One typed URL, no app install, no IP discovery on the tablet side. This is the most reliable customer-facing answer.
+2. If the customer tablet is in your shipping bundle, the **stable URL** is the most reliable customer-facing answer. With the default claim profile and a Samsung tablet, that URL is `http://10.152.47.250:4280/`. One typed URL, no app install, no IP discovery on the tablet side. The customer gets it from the docs you ship with the kit.
 3. iPad/iPhone users get `wardragon.local:4280` via Safari without doing anything.
 4. Android-with-Wi-Fi users get `wardragon.local:4280` via Firefox or *Service Browser*.
 5. If all else fails: HDMI/keyboard for one boot, read the URL from the Overview tab, bookmark it.
