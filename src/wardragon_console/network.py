@@ -35,6 +35,29 @@ def ipv4_interfaces() -> list[dict[str, str]]:
 
 DEFAULT_TETHER_CIDRS = ("192.168.42.0/24", "192.168.43.0/24", "172.20.10.0/28")
 
+# Drivers that are unambiguously phone-tether protocols in the real world.
+# RNDIS, CDC-NCM and ipheth are not used by any standard USB-Ethernet dongle;
+# seeing one of these on an interface effectively guarantees a tethered phone.
+UNAMBIGUOUS_PHONE_DRIVERS = frozenset({"rndis_host", "cdc_ncm", "ipheth"})
+
+# USB vendor IDs of phone makers. Used to disambiguate the cdc_ether driver,
+# which is shared between phones and generic USB-Ethernet adapters.
+KNOWN_PHONE_VENDORS = frozenset({
+    "05ac",  # Apple
+    "04e8",  # Samsung
+    "18d1",  # Google
+    "2717",  # Xiaomi
+    "2a70",  # OnePlus
+    "12d1",  # Huawei
+    "22b8",  # Motorola
+    "1004",  # LG
+})
+
+# Subnets the console must never bind a tether listener on, even if the
+# driver/vendor match. 172.31.100.0/24 is the AntSDR private link on a
+# WarDragon kit.
+NEVER_TETHER_PREFIXES = ("172.31.100.",)
+
 
 def tether_candidates(allowed_cidrs: tuple[str, ...] = DEFAULT_TETHER_CIDRS) -> list[dict[str, Any]]:
     candidates = []
@@ -51,15 +74,42 @@ def is_tether_interface(interface: dict[str, Any], allowed_cidrs: tuple[str, ...
         return False
     if ipv4.startswith("169.254."):
         return False
-    if not _ip_in_allowed_cidrs(ipv4, allowed_cidrs):
+    if any(ipv4.startswith(prefix) for prefix in NEVER_TETHER_PREFIXES):
+        return False
+    if not _is_private_ipv4(ipv4):
         return False
 
     driver = str(interface.get("driver", ""))
-    if driver in {"rndis_host", "cdc_ether", "cdc_ncm", "ipheth"}:
+    vendor = str(interface.get("usb_vendor", "")).lower()
+
+    # Unambiguously phone-tether drivers: trust without the CIDR allowlist.
+    # This is what fixes Samsung / Pixel / etc. on non-default tether subnets
+    # like 10.x or anything outside 192.168.42|43.0/24.
+    if driver in UNAMBIGUOUS_PHONE_DRIVERS:
         return True
-    if interface.get("usb_vendor") == "05ac":
+
+    # Apple iPhone/iPad: ipheth covers most cases above; older paths report
+    # only the USB vendor without a clean driver name.
+    if vendor == "05ac":
         return True
+
+    # cdc_ether is shared between phones and generic USB-Ethernet dongles.
+    # Trust only when the USB vendor is a known phone maker, or when the
+    # operator has explicitly narrowed acceptance to a CIDR.
+    if driver == "cdc_ether":
+        if vendor in KNOWN_PHONE_VENDORS:
+            return True
+        if _ip_in_allowed_cidrs(ipv4, allowed_cidrs):
+            return True
     return False
+
+
+def _is_private_ipv4(ipv4: str) -> bool:
+    try:
+        address = ip_address(ipv4)
+    except ValueError:
+        return False
+    return address.is_private and not address.is_loopback and not address.is_link_local
 
 
 def _ip_in_allowed_cidrs(ipv4: str, allowed_cidrs: tuple[str, ...]) -> bool:
