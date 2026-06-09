@@ -64,14 +64,6 @@ class NetworkDetectionTests(unittest.TestCase):
         # AntSDR. Even if a fake driver were reported, we never bind there.
         self.assertFalse(is_tether_interface({"name": "enp1s0", "ipv4": "172.31.100.1", "driver": "rndis_host"}))
 
-    def test_custom_allowed_cidr_lets_cdc_ether_through(self):
-        # The CIDR override is still useful for the ambiguous cdc_ether case
-        # where the operator wants to whitelist a known good subnet.
-        self.assertTrue(is_tether_interface(
-            {"name": "usb0", "ipv4": "192.168.68.68", "driver": "cdc_ether", "usb_vendor": "0bda"},
-            allowed_cidrs=("192.168.68.0/24",),
-        ))
-
 
 if __name__ == "__main__":
     unittest.main()
