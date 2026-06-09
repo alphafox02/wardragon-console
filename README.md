@@ -79,6 +79,32 @@ What it does (idempotent — safe to re-run):
 
 When internet NTP is reachable, chrony keeps using it. When the kit goes offline, chrony falls back to GPS so the system clock keeps tracking UTC instead of free-running.
 
+### Optional helper: SDDM login-screen status widget
+
+`packaging/setup-sddm-status.sh` installs a small status panel into the SDDM login screen — useful on headless or shared-kit setups so anyone looking at the kit's display sees system health before logging in. Currently supports the Lubuntu base SDDM theme.
+
+```bash
+sudo packaging/setup-sddm-status.sh
+```
+
+What it does (idempotent — safe to re-run):
+
+- Copies `/usr/share/sddm/themes/lubuntu/` to `/usr/share/sddm/themes/lubuntu-wardragon/` (preserves the original Lubuntu theme as a fallback).
+- Installs `packaging/sddm-theme/Main.qml` into the copy, overlaying a bottom-right widget on the existing Lubuntu greeter scene.
+- Drops `/etc/sddm.conf.d/10-wardragon-theme.conf` to select the new theme, without disturbing any existing `[Autologin]` block in `/etc/sddm.conf`.
+
+The widget polls `http://127.0.0.1:4280/api/snapshot` every 3 s and shows:
+
+- console reachable / unreachable
+- WiFi / BLE / DJI receiver dots (filtered from droneid-go sources; UART / Sniffle are intentionally hidden)
+- DragonSig SDR state, phase/mode, noise floor
+- current drone and signal counts
+- tablet URL — stable when the claim profile matches, dynamic for any other recognized phone tether
+
+To see it, log out of your current session — SDDM redraws on next login. Revert with `sudo rm /etc/sddm.conf.d/10-wardragon-theme.conf && sudo systemctl restart sddm`. The widget cannot block login: an unreachable console or a parse error just leaves the panel showing "console unreachable", and the rest of the greeter stays interactive.
+
+This is **not** invoked by `install.sh` because changing the SDDM theme is a system-wide change that can disrupt running graphical sessions, and that decision belongs to the operator.
+
 ## Updating
 
 Idempotent re-install is the supported update path:
