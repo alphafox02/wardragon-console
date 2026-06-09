@@ -53,6 +53,22 @@ KNOWN_PHONE_VENDORS = frozenset({
     "1004",  # LG
 })
 
+# USB vendor IDs of USB-to-Ethernet dongle chipmakers. These are *never*
+# phone tethers, regardless of which driver the kernel ends up binding or
+# what subnet DHCP hands out. Checked before any tether-classification
+# logic so a LAN dongle that happens to land in a default tether CIDR
+# (rare but observed) never gets a console listener attached.
+USB_ETHERNET_DONGLE_VENDORS = frozenset({
+    "0bda",  # Realtek (RTL8152, RTL8153, RTL8156)
+    "0b95",  # ASIX (AX88179, AX88772, AX88178)
+    "13b1",  # Linksys
+    "0846",  # NETGEAR
+    "0411",  # Buffalo
+    "1a40",  # Terminus / no-name USB hubs that bridge ethernet
+    "9710",  # MosChip / Plugable
+    "0fe6",  # ICS Advent / DM9601-based
+})
+
 # Subnets the console must never bind a tether listener on, even if the
 # driver/vendor match. 172.31.100.0/24 is the AntSDR private link on a
 # WarDragon kit.
@@ -82,6 +98,13 @@ def is_tether_interface(interface: dict[str, Any], allowed_cidrs: tuple[str, ...
     driver = str(interface.get("driver", ""))
     vendor = str(interface.get("usb_vendor", "")).lower()
 
+    # Known USB-Ethernet dongle vendors are never tethers, regardless of
+    # driver or subnet. This is the primary defence against a LAN dongle
+    # accidentally landing in a default tether CIDR and getting a listener
+    # attached (which would expose the console on the LAN).
+    if vendor in USB_ETHERNET_DONGLE_VENDORS:
+        return False
+
     # Unambiguously phone-tether drivers: trust without the CIDR allowlist.
     # This is what fixes Samsung / Pixel / etc. on non-default tether subnets
     # like 10.x or anything outside 192.168.42|43.0/24.
@@ -94,13 +117,13 @@ def is_tether_interface(interface: dict[str, Any], allowed_cidrs: tuple[str, ...
         return True
 
     # cdc_ether is shared between phones and generic USB-Ethernet dongles.
-    # Trust only when the USB vendor is a known phone maker, or when the
-    # operator has explicitly narrowed acceptance to a CIDR.
-    if driver == "cdc_ether":
-        if vendor in KNOWN_PHONE_VENDORS:
-            return True
-        if _ip_in_allowed_cidrs(ipv4, allowed_cidrs):
-            return True
+    # Trust only when the USB vendor is a known phone maker. The previous
+    # CIDR-only fallback was removed because a generic dongle with an IP
+    # that happened to land in a default tether subnet would silently get
+    # classified as a tether. If you have an exotic phone using cdc_ether
+    # with an unrecognized vendor, add its VID to KNOWN_PHONE_VENDORS.
+    if driver == "cdc_ether" and vendor in KNOWN_PHONE_VENDORS:
+        return True
     return False
 
 

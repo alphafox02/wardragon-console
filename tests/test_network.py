@@ -31,14 +31,33 @@ class NetworkDetectionTests(unittest.TestCase):
         interface = {"name": "enxd66e", "ipv4": "10.152.47.95", "driver": "rndis_host", "usb_vendor": "04e8"}
         self.assertTrue(is_tether_interface(interface))
 
-    def test_cdc_ether_requires_known_phone_vendor_or_cidr_match(self):
+    def test_cdc_ether_requires_known_phone_vendor(self):
         # cdc_ether is ambiguous (dongles use it too). Plain Realtek dongle
-        # with cdc_ether driver should be rejected outside the allowed CIDRs.
+        # with cdc_ether driver is always rejected regardless of subnet.
         dongle = {"name": "enx00e0", "ipv4": "192.168.68.5", "driver": "cdc_ether", "usb_vendor": "0bda"}
         self.assertFalse(is_tether_interface(dongle))
         # Same driver + known phone vendor: tether.
         phone = {"name": "enxabcd", "ipv4": "10.10.10.5", "driver": "cdc_ether", "usb_vendor": "18d1"}
         self.assertTrue(is_tether_interface(phone))
+
+    def test_known_usb_ethernet_dongle_vendors_are_never_tether(self):
+        # Even on driver+CIDR combinations that would otherwise classify,
+        # a known-dongle vendor short-circuits to False. This prevents a
+        # LAN-side adapter that happens to get an IP in a default tether
+        # subnet from accidentally getting a console listener attached.
+        cases = [
+            # Realtek dongle in the Android-tether default subnet
+            {"name": "enx00", "ipv4": "192.168.42.50", "driver": "cdc_ether", "usb_vendor": "0bda"},
+            # ASIX dongle on iOS-tether default subnet
+            {"name": "enx00", "ipv4": "172.20.10.5",   "driver": "cdc_ether", "usb_vendor": "0b95"},
+            # Pretending to be rndis_host but a known dongle VID
+            {"name": "enx00", "ipv4": "192.168.42.5",  "driver": "rndis_host", "usb_vendor": "0bda"},
+        ]
+        for case in cases:
+            self.assertFalse(
+                is_tether_interface(case),
+                f"dongle vendor {case['usb_vendor']} should never be tether: {case}",
+            )
 
     def test_antsdr_link_is_never_tether(self):
         # The kit's built-in LAN port is statically 172.31.100.1/24 for

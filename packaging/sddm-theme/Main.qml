@@ -456,8 +456,15 @@ Rectangle {
             }
 
             Text {
-                text: wdStatus.tether.stable_url || wdStatus.tether.url || "Tether: not connected"
-                color: (wdStatus.tether.stable_url || wdStatus.tether.url) ? "#22c55e" : "#6b7280"
+                // Only render a URL when the snapshot says a tether is
+                // actually bound (tether.active). Belt-and-braces against
+                // stale state and against any future misclassification by
+                // the tether watcher — if active is false, the panel says
+                // "not connected" regardless of what url fields contain.
+                text: wdStatus.tether.active === true
+                      ? (wdStatus.tether.stable_url || wdStatus.tether.url || "Tether: bound (no URL)")
+                      : "Tether: not connected"
+                color: wdStatus.tether.active === true ? "#22c55e" : "#6b7280"
                 font.family: "Ubuntu"
                 font.pixelSize: 11
                 wrapMode: Text.WrapAnywhere
