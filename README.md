@@ -105,6 +105,37 @@ To see it, log out of your current session — SDDM redraws on next login. Rever
 
 This is **not** invoked by `install.sh` because changing the SDDM theme is a system-wide change that can disrupt running graphical sessions, and that decision belongs to the operator.
 
+### Optional helper: Pi-greeter login-screen status overlay
+
+`packaging/setup-pi-status-overlay.sh` is the Pi OS Trixie counterpart to `setup-sddm-status.sh`. It installs a thin **waybar** bar at the bottom of the LightDM login screen that rotates every ~3 s through:
+
+- WiFi / BLE / DJI receiver dots from droneid-go
+- DragonSig SDR state (ok/down, phase, mode, noise floor)
+- current drone and signal counts
+- tablet URL (stable when the claim profile matches, dynamic otherwise, or "Tether: not connected")
+
+```bash
+sudo packaging/setup-pi-status-overlay.sh
+```
+
+What it does (idempotent — safe to re-run):
+
+- apt-installs `waybar`, `jq`, `curl` if missing.
+- Drops the rotator script at `/usr/local/bin/wardragon-status-rotator`. The script polls `http://127.0.0.1:4280/api/snapshot`, picks a frame based on wall-clock time, and prints JSON for waybar's custom-module protocol.
+- Drops waybar config + CSS at `/etc/xdg/labwc-greeter/wardragon-waybar/`.
+- Appends a marker-fenced `waybar …` line to `/etc/xdg/labwc-greeter/autostart` so the greeter session launches waybar alongside `pi-greeter`. Backs up the original autostart to `*.wardragon.bak` on first run; the marker block makes re-runs and removals clean.
+
+To see it, log out (or reboot) — pi-greeter restarts and waybar comes up with it. The bar polls every 3 s; if the console is unreachable, the bar shows "WarDragon Console unreachable" instead of blank space.
+
+Revert:
+```bash
+sudo cp /etc/xdg/labwc-greeter/autostart.wardragon.bak /etc/xdg/labwc-greeter/autostart
+sudo rm -rf /etc/xdg/labwc-greeter/wardragon-waybar /usr/local/bin/wardragon-status-rotator
+sudo systemctl restart lightdm   # only if you want it gone immediately
+```
+
+This helper bails cleanly if `/etc/xdg/labwc-greeter/` does not exist — meaning the system is using a different greeter (likely SDDM on Lubuntu, where you would use `setup-sddm-status.sh` instead).
+
 ## Updating
 
 Idempotent re-install is the supported update path:

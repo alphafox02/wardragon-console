@@ -1,0 +1,14 @@
+{
+  "name": "wardragon-status",
+  "layer": "overlay",
+  "position": "bottom",
+  "height": 36,
+  "spacing": 0,
+  "modules-center": ["custom/wardragon"],
+  "custom/wardragon": {
+    "exec": "/usr/local/bin/wardragon-status-rotator",
+    "interval": 3,
+    "return-type": "json",
+    "tooltip": true
+  }
+}

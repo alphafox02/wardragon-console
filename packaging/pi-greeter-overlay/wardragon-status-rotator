@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# wardragon-status-rotator
+# Outputs JSON for a waybar custom module. Cycles through 4 frames every 3s
+# by keying off wall-clock time (no state file needed — every greeter user
+# can run this with no shared state).
+set -uo pipefail
+
+SLOTS=4
+INTERVAL=3
+IDX=$(( ($(date +%s) / INTERVAL) % SLOTS ))
+
+SNAP=$(curl -fsS --max-time 1 http://127.0.0.1:4280/api/snapshot 2>/dev/null || true)
+if [[ -z "$SNAP" ]]; then
+  printf '{"text":"WarDragon Console unreachable","class":"error"}\n'
+  exit 0
+fi
+
+GREEN=22c55e
+YELLOW=eab308
+RED=ef4444
+GREY=6b7280
+
+state_color() {
+  case "$1" in
+    connected) echo "$GREEN" ;;
+    connecting|reconnecting) echo "$YELLOW" ;;
+    error|dead) echo "$RED" ;;
+    *) echo "$GREY" ;;
+  esac
+}
+
+q() { jq -r "$1" <<<"$SNAP" 2>/dev/null; }
+
+case "$IDX" in
+  0)
+    w_st=$(q '.droneid.payload.sources.wifi.state_str // "?"')
+    w_r=$(q '.droneid.payload.sources.wifi.messages_per_sec // 0')
+    b_st=$(q '.droneid.payload.sources.ble.state_str // "?"')
+    b_r=$(q '.droneid.payload.sources.ble.messages_per_sec // 0')
+    d_st=$(q '.droneid.payload.sources.dji.state_str // "?"')
+    d_r=$(q '.droneid.payload.sources.dji.messages_per_sec // 0')
+    text=$(printf "<span foreground='#%s'>●</span> WiFi %.1f/s     <span foreground='#%s'>●</span> BLE %.1f/s     <span foreground='#%s'>●</span> DJI %.1f/s" \
+      "$(state_color "$w_st")" "$w_r" \
+      "$(state_color "$b_st")" "$b_r" \
+      "$(state_color "$d_st")" "$d_r")
+    ;;
+  1)
+    sdr_ok=$(q '.dragonsig.payload.sdr_ok // false')
+    phase=$(q '.dragonsig.payload.phase // "?"')
+    mode=$(q '.dragonsig.payload.mode // "?"')
+    noise=$(q '.dragonsig.payload.noise_floor_db // 0')
+    [[ "$sdr_ok" == "true" ]] && c=$GREEN || c=$RED
+    [[ "$sdr_ok" == "true" ]] && st=ok || st=down
+    text=$(printf "<span foreground='#%s'>●</span> DragonSig %s · %s/%s · %.1f dBm" "$c" "$st" "$phase" "$mode" "$noise")
+    ;;
+  2)
+    drones=$(q '.summary.drone_count // 0')
+    signals=$(q '.summary.signal_count // 0')
+    text=$(printf "Drones: %s     ·     Signals: %s" "$drones" "$signals")
+    ;;
+  3)
+    active=$(q '.access.tether.active // false')
+    if [[ "$active" == "true" ]]; then
+      url=$(q '.access.tether.stable_url // .access.tether.url')
+      text=$(printf "<span foreground='#%s'>●</span> Tablet: %s" "$GREEN" "$url")
+    else
+      text=$(printf "<span foreground='#%s'>●</span> Tether: not connected" "$GREY")
+    fi
+    ;;
+esac
+
+jq -nc --arg t "$text" '{text: $t, tooltip: $t}'
