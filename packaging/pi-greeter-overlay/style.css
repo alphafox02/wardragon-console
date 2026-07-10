@@ -2,18 +2,18 @@
   border: none;
   border-radius: 0;
   font-family: "Inter", "DejaVu Sans", sans-serif;
-  font-size: 13px;
+  font-size: 15px;
   min-height: 0;
 }
 
 window#waybar {
-  background: rgba(15, 20, 22, 0.82);
+  background: rgba(15, 20, 22, 0.85);
   color: #d4d4d8;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 #custom-wardragon {
-  padding: 6px 16px;
+  padding: 8px 20px;
   letter-spacing: 0.02em;
 }
 

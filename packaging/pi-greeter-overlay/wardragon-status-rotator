@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # wardragon-status-rotator
-# Outputs JSON for a waybar custom module. Cycles through 4 frames every 3s
-# by keying off wall-clock time (no state file needed — every greeter user
-# can run this with no shared state).
+# Outputs JSON for a waybar custom module. Cycles through the frames
+# below every 3s by keying off wall-clock time (no state file needed).
+# The DragonSig frame is skipped on kits without the DragonSig capability
+# (Pi/Pro), and the Signals field is dropped from the counts frame there
+# so the bar never reports a metric the kit cannot produce.
 set -uo pipefail
 
-SLOTS=4
 INTERVAL=3
-IDX=$(( ($(date +%s) / INTERVAL) % SLOTS ))
-
 SNAP=$(curl -fsS --max-time 1 http://127.0.0.1:4280/api/snapshot 2>/dev/null || true)
+
 if [[ -z "$SNAP" ]]; then
   printf '{"text":"WarDragon Console unreachable","class":"error"}\n'
   exit 0
 fi
+
+q() { jq -r "$1" <<<"$SNAP" 2>/dev/null; }
 
 GREEN=22c55e
 YELLOW=eab308
@@ -29,10 +31,18 @@ state_color() {
   esac
 }
 
-q() { jq -r "$1" <<<"$SNAP" 2>/dev/null; }
+HAS_DRAGONSIG=$(q '.capabilities.has_dragonsig // true')
+if [[ "$HAS_DRAGONSIG" == "false" ]]; then
+  FRAMES=(receivers counts tether)
+else
+  FRAMES=(receivers dragonsig counts tether)
+fi
+SLOTS=${#FRAMES[@]}
+IDX=$(( ($(date +%s) / INTERVAL) % SLOTS ))
+FRAME=${FRAMES[$IDX]}
 
-case "$IDX" in
-  0)
+case "$FRAME" in
+  receivers)
     w_st=$(q '.droneid.payload.sources.wifi.state_str // "?"')
     w_r=$(q '.droneid.payload.sources.wifi.messages_per_sec // 0')
     b_st=$(q '.droneid.payload.sources.ble.state_str // "?"')
@@ -44,7 +54,7 @@ case "$IDX" in
       "$(state_color "$b_st")" "$b_r" \
       "$(state_color "$d_st")" "$d_r")
     ;;
-  1)
+  dragonsig)
     sdr_ok=$(q '.dragonsig.payload.sdr_ok // false')
     phase=$(q '.dragonsig.payload.phase // "?"')
     mode=$(q '.dragonsig.payload.mode // "?"')
@@ -53,12 +63,16 @@ case "$IDX" in
     [[ "$sdr_ok" == "true" ]] && st=ok || st=down
     text=$(printf "<span foreground='#%s'>●</span> DragonSig %s · %s/%s · %.1f dBm" "$c" "$st" "$phase" "$mode" "$noise")
     ;;
-  2)
+  counts)
     drones=$(q '.summary.drone_count // 0')
-    signals=$(q '.summary.signal_count // 0')
-    text=$(printf "Drones: %s     ·     Signals: %s" "$drones" "$signals")
+    if [[ "$HAS_DRAGONSIG" == "false" ]]; then
+      text=$(printf "Drones: %s" "$drones")
+    else
+      signals=$(q '.summary.signal_count // 0')
+      text=$(printf "Drones: %s     ·     Signals: %s" "$drones" "$signals")
+    fi
     ;;
-  3)
+  tether)
     active=$(q '.access.tether.active // false')
     if [[ "$active" == "true" ]]; then
       url=$(q '.access.tether.stable_url // .access.tether.url')

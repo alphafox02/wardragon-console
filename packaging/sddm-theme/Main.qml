@@ -281,6 +281,7 @@ Rectangle {
         property var sources: []
         property var dragonsig: ({})
         property bool reachable: false
+        property bool hasDragonSig: true
 
         function prettyName(name) {
             var nm = (name || "").toLowerCase();
@@ -353,6 +354,7 @@ Rectangle {
                             wdStatus.tether = (d.access || {}).tether || {};
                             wdStatus.sources = wdStatus.rebuildSources(d);
                             wdStatus.dragonsig = (d.dragonsig || {}).payload || {};
+                            wdStatus.hasDragonSig = ((d.capabilities || {}).has_dragonsig !== false);
                             wdStatus.reachable = true;
                         } catch(e) {
                             wdStatus.reachable = false;
@@ -435,7 +437,7 @@ Rectangle {
                 }
             }
 
-            Item { width: 1; height: 2 }
+            Item { width: 1; height: 2; visible: wdStatus.hasDragonSig }
 
             Text {
                 text: wdStatus.dragonsigSummary(wdStatus.dragonsig)
@@ -444,12 +446,15 @@ Rectangle {
                 font.pixelSize: 11
                 wrapMode: Text.WrapAnywhere
                 width: 332
+                visible: wdStatus.hasDragonSig
             }
 
             Item { width: 1; height: 2 }
 
             Text {
-                text: "Drones: " + (wdStatus.summary.drone_count || 0) + "    Signals: " + (wdStatus.summary.signal_count || 0)
+                text: wdStatus.hasDragonSig
+                      ? ("Drones: " + (wdStatus.summary.drone_count || 0) + "    Signals: " + (wdStatus.summary.signal_count || 0))
+                      : ("Drones: " + (wdStatus.summary.drone_count || 0))
                 color: "#d4d4d8"
                 font.family: "Ubuntu"
                 font.pixelSize: 12

@@ -2,7 +2,7 @@
   "name": "wardragon-status",
   "layer": "overlay",
   "position": "bottom",
-  "height": 36,
+  "height": 44,
   "spacing": 0,
   "modules-center": ["custom/wardragon"],
   "custom/wardragon": {

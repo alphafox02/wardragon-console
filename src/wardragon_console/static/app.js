@@ -194,11 +194,15 @@ function renderSnapshot() {
   const dsStatus = snap.dragonsync.status.payload || {};
   const drones = (snap.dragonsync.drones.payload || {}).drones || [];
   const signals = (snap.dragonsync.signals.payload || {}).signals || [];
+  const hasDragonSig = snap.capabilities?.has_dragonsig !== false;
+  applyDragonSigVisibility(hasDragonSig);
 
   document.getElementById("kit-id").textContent = snap.summary.kit_id || dsStatus.uid || snap.console.hostname || "Kit unavailable";
   document.getElementById("drone-count").textContent = drones.length;
-  document.getElementById("signal-count").textContent = signals.length;
-  setOverall(overallState(snap.services));
+  if (hasDragonSig) {
+    document.getElementById("signal-count").textContent = signals.length;
+  }
+  setOverall(overallState(snap.services, hasDragonSig));
 
   renderDl("kit-summary", {
     Hostname: snap.console.hostname,
@@ -239,15 +243,18 @@ function renderSnapshot() {
   renderDragonsig(snap.dragonsig.payload, snap.services.dragonsig);
   renderDrones(drones);
   renderSignals(signals);
-  renderDl("version-info", {
+  const versionInfo = {
     Console: snap.console.version || "0.1.0",
     Hostname: snap.console.hostname,
     "Kit ID": snap.summary.kit_id || "N/A",
     "droneid-go": snap.droneid.payload?.version || "N/A",
-    DragonSig: snap.dragonsig.payload?.version || "N/A",
-    "DragonSync API": snap.dragonsync.status.error || "OK",
-    Generated: new Date(snap.generated_at * 1000).toLocaleString(),
-  });
+  };
+  if (hasDragonSig) {
+    versionInfo.DragonSig = snap.dragonsig.payload?.version || "N/A";
+  }
+  versionInfo["DragonSync API"] = snap.dragonsync.status.error || "OK";
+  versionInfo.Generated = new Date(snap.generated_at * 1000).toLocaleString();
+  renderDl("version-info", versionInfo);
   renderUpdates(snap.updates || {});
 }
 
@@ -312,7 +319,10 @@ async function checkForUpdates() {
 
 function renderServiceList(services) {
   const labels = { monitor: "wardragon_monitor", droneid: "droneid-go", dragonsig: "DragonSig" };
-  document.getElementById("service-list").innerHTML = Object.entries(services).map(([key, service]) => `
+  const hasDragonSig = state.snapshot?.capabilities?.has_dragonsig !== false;
+  document.getElementById("service-list").innerHTML = Object.entries(services)
+    .filter(([key]) => hasDragonSig || key !== "dragonsig")
+    .map(([key, service]) => `
     <div class="status-row">
       <span class="status-dot ${stateClass(service.state)}"></span>
       <strong>${labels[key] || key}</strong>
@@ -322,6 +332,7 @@ function renderServiceList(services) {
 }
 
 function renderOperatorNotes(snap) {
+  const hasDragonSig = snap.capabilities?.has_dragonsig !== false;
   const notes = [];
   if (snap.access?.tether?.stable_url) {
     notes.push(`Tablet stable URL: ${snap.access.tether.stable_url} (preferred for shipped tablets)`);
@@ -333,7 +344,9 @@ function renderOperatorNotes(snap) {
   if (!snap.summary.gps_fix) {
     notes.push("No live GPS fix reported. Check the GPS tab for static position or gpsd state.");
   }
-  const serviceStates = Object.entries(snap.services || {}).filter(([, value]) => value.state === "DEGRADED" || value.state === "NOT_PRESENT");
+  const serviceStates = Object.entries(snap.services || {})
+    .filter(([key]) => hasDragonSig || key !== "dragonsig")
+    .filter(([, value]) => value.state === "DEGRADED" || value.state === "NOT_PRESENT");
   serviceStates.forEach(([name, value]) => {
     notes.push(`${name} is ${value.state.replace("_", " ").toLowerCase()}.`);
   });
@@ -596,12 +609,35 @@ function setOverall(value) {
   document.getElementById("overall-dot").className = `status-dot ${stateClass(normalized)}`;
 }
 
-function overallState(services) {
-  const values = Object.values(services).map((item) => item.state);
+function overallState(services, hasDragonSig = true) {
+  const entries = Object.entries(services).filter(([key]) => hasDragonSig || key !== "dragonsig");
+  const values = entries.map(([, item]) => item.state);
   if (values.includes("DEGRADED")) return "DEGRADED";
   if (values.includes("STARTING")) return "STARTING";
   if (values.includes("HEALTHY")) return "HEALTHY";
   return "NOT_PRESENT";
+}
+
+function applyDragonSigVisibility(hasDragonSig) {
+  const dragonsigCard = document.getElementById("card-dragonsig");
+  const signalsTab = document.getElementById("tab-signals");
+  const signalsMetric = document.getElementById("metric-signals");
+  const receiversGrid = document.getElementById("receivers-grid");
+  const show = hasDragonSig ? "" : "none";
+  if (dragonsigCard) dragonsigCard.style.display = show;
+  if (signalsTab) signalsTab.style.display = show;
+  if (signalsMetric) signalsMetric.style.display = hasDragonSig ? "" : "none";
+  // If DragonSig is hidden, expand droneid-go to fill the row rather than
+  // leaving a big empty second column on the Receivers tab.
+  if (receiversGrid) receiversGrid.classList.toggle("one", !hasDragonSig);
+  // If the user is currently viewing the Signals tab and DragonSig has just
+  // been reported as unavailable, redirect them to Overview.
+  if (!hasDragonSig && signalsTab) {
+    const activeTab = document.querySelector(".tab.active");
+    if (activeTab && activeTab.dataset.tab === "signals") {
+      document.querySelector('.tab[data-tab="overview"]').click();
+    }
+  }
 }
 
 function stateClass(value) {

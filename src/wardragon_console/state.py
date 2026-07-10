@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import __version__
+from .capabilities import detect_capabilities
 from .network import ipv4_interfaces
 
 
@@ -21,6 +22,7 @@ class SnapshotStore:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._started_at = time.time()
+        self._capabilities = detect_capabilities()
         self._data: dict[str, dict[str, Any]] = {
             "monitor": {"payload": None, "seen_at": None, "error": None},
             "droneid": {"payload": None, "seen_at": None, "error": None},
@@ -82,6 +84,7 @@ class SnapshotStore:
                 "drone_count": len(drones.get("drones", [])) if isinstance(drones, dict) else 0,
                 "signal_count": len(signals.get("signals", [])) if isinstance(signals, dict) else 0,
             },
+            "capabilities": self._capabilities,
             "updates": data["updates"]["payload"] or {},
         }
 

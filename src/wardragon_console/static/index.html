@@ -14,7 +14,7 @@
     </div>
     <div class="top-metrics">
       <div><span class="metric-value" id="drone-count">0</span><span class="metric-label">Drones</span></div>
-      <div><span class="metric-value" id="signal-count">0</span><span class="metric-label">Signals</span></div>
+      <div id="metric-signals"><span class="metric-value" id="signal-count">0</span><span class="metric-label">Signals</span></div>
       <div><span class="status-dot" id="overall-dot"></span><span id="overall-state">Starting</span></div>
     </div>
   </header>
@@ -25,7 +25,7 @@
     <button class="tab" data-tab="system">System</button>
     <button class="tab" data-tab="receivers">Receivers</button>
     <button class="tab" data-tab="drones">Drones</button>
-    <button class="tab" data-tab="signals">Signals</button>
+    <button class="tab" data-tab="signals" id="tab-signals">Signals</button>
     <button class="tab" data-tab="config">Config</button>
     <button class="tab" data-tab="dragonscope">DragonScope</button>
     <button class="tab" data-tab="about">Version</button>
@@ -78,12 +78,12 @@
     </section>
 
     <section class="panel" id="receivers">
-      <div class="grid two">
+      <div class="grid two" id="receivers-grid">
         <article class="card">
           <h2>droneid-go</h2>
           <div id="droneid-sources" class="receiver-list"></div>
         </article>
-        <article class="card">
+        <article class="card" id="card-dragonsig">
           <h2>DragonSig</h2>
           <dl id="dragonsig-health"></dl>
         </article>

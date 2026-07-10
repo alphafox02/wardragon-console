@@ -167,7 +167,21 @@ WARDRAGON_CONSOLE_TETHER_CLAIM_PROFILES=10.152.47.0/24=10.152.47.250
 WARDRAGON_CONSOLE_UPDATE_CHECK=1
 WARDRAGON_CONSOLE_UPSTREAM_REPO=alphafox02/wardragon-console
 WARDRAGON_DRAGONSYNC_UPSTREAM_REPO=alphafox02/DragonSync
+WARDRAGON_HAS_DRAGONSIG=auto
 ```
+
+### Kit capability detection
+
+The console runs on two WarDragon SKUs in the same family:
+
+- **Elite** (x86_64, second SDR): ships with DragonSig for FPV/RF signal detection.
+- **Pro** (ARM/Pi, single SDR): does not ship with DragonSig.
+
+At startup the console detects which one it is by looking for the `dragonsig.service` systemd unit file in `/etc/systemd/system/`, `/lib/systemd/system/`, `/usr/lib/systemd/system/`, or `/run/systemd/system/`. Elite kits are provisioned with that unit; Pro kits are not.
+
+The detection result is exposed in `/api/snapshot` as `capabilities.has_dragonsig`. When it is `false`, the web UI hides the Signals tab, the Signals counter in the header, the DragonSig card on the Receivers tab, the DragonSig row on the Version tab, and any DragonSig entry in the operator notes and Overview receiver-health list — cleanly presenting only what the kit can actually do. The Pi login-screen status bar likewise skips its DragonSig frame and drops the Signals figure on Pro kits.
+
+Override the detection with `WARDRAGON_HAS_DRAGONSIG=yes|no|auto`. Default is `auto` (filesystem check). Use `no` on an Elite kit for testing the Pro UI, or `yes` to force-show DragonSig for debugging.
 
 Config writes are only allowed by default when the server is bound to loopback. The packaged service enables `WARDRAGON_CONSOLE_REMOTE_CONFIG_WRITE=1` and `WARDRAGON_CONSOLE_REMOTE_RESTART=1` so a tethered tablet can both edit configs and restart DragonSync. The trust model is "if you can plug into the USB tether, you have physical access." Flip either to `0` if you want to limit the tablet to read-only or to config-only.
 
