@@ -211,14 +211,15 @@ function renderSnapshot() {
     "GPS fix": snap.summary.gps_fix ? "yes" : "no",
     "Console uptime": fmt.time(snap.console.uptime_seconds),
   });
-  renderDl("activity-summary", {
+  const activity = {
     "Current drones": drones.length,
-    "Current signals": signals.length,
-    "GPS source": gps.time_source ?? dsStatus.time_source ?? "N/A",
-    "DragonSync API": serviceError(snap.dragonsync.status),
-    "Drone snapshot": fmt.age(ageFromSeen(snap.dragonsync.drones.seen_at, snap.generated_at)),
-    "Signal snapshot": fmt.age(ageFromSeen(snap.dragonsync.signals.seen_at, snap.generated_at)),
-  });
+  };
+  if (hasDragonSig) activity["Current signals"] = signals.length;
+  activity["GPS source"] = gps.time_source ?? dsStatus.time_source ?? "N/A";
+  activity["DragonSync API"] = serviceError(snap.dragonsync.status);
+  activity["Drone snapshot"] = fmt.age(ageFromSeen(snap.dragonsync.drones.seen_at, snap.generated_at));
+  if (hasDragonSig) activity["Signal snapshot"] = fmt.age(ageFromSeen(snap.dragonsync.signals.seen_at, snap.generated_at));
+  renderDl("activity-summary", activity);
   renderServiceList(snap.services);
   renderOperatorNotes(snap);
   renderDl("gps-position", {
