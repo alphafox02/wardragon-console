@@ -370,16 +370,27 @@ function renderDroneid(health) {
     target.innerHTML = `<div class="subtle">No health snapshot</div>`;
     return;
   }
-  target.innerHTML = Object.values(health.sources).map((source) => `
+  target.innerHTML = Object.values(health.sources).map((source) => {
+    // Prefer state_str for the running-vs-disabled decision. Observed in the
+    // field: droneid-go can leave `enabled: false` even when a receiver is
+    // clearly running (state_str=connected, messages flowing). Trusting
+    // state_str first avoids showing "disabled" for a receiver we can see
+    // is decoding traffic. Only fall back to the enabled flag when state_str
+    // is empty; only report "disabled" when nothing indicates activity.
+    const state = (source.state_str || "").toLowerCase();
+    const activeStates = new Set(["connected", "connecting", "reconnecting"]);
+    const isActive = activeStates.has(state) || (source.enabled && state !== "disabled");
+    const label = isActive ? (source.state_str || "unknown") : (source.state_str || "disabled");
+    return `
     <div class="receiver-row">
-      <span class="status-dot ${source.enabled ? sourceStateClass(source.state_str) : ""}"></span>
+      <span class="status-dot ${isActive ? sourceStateClass(source.state_str) : ""}"></span>
       <div>
         <strong>${escapeHtml(source.name)}</strong>
-        <div class="subtle">${source.enabled ? escapeHtml(source.state_str || "unknown") : "disabled"}</div>
+        <div class="subtle">${escapeHtml(label)}</div>
       </div>
       <span class="pill">${fmt.number(source.messages_per_sec || 0, 2)}/s · ${source.messages_total || 0}</span>
-    </div>
-  `).join("");
+    </div>`;
+  }).join("");
 }
 
 function renderDragonsig(health, service) {

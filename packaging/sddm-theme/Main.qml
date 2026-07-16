@@ -293,16 +293,27 @@ Rectangle {
             return name;
         }
 
+        function sourceIsActive(s) {
+            // Trust state_str over the enabled flag: droneid-go has been
+            // observed reporting enabled:false while the receiver is
+            // clearly running (state=connected, messages flowing). Only
+            // treat the source as inactive when both signals agree.
+            var st = (s.state || "").toLowerCase();
+            if (st === "connected" || st === "connecting" || st === "reconnecting") return true;
+            return s.enabled === true && st !== "disabled";
+        }
+
         function sourceColor(s) {
-            if (!s.enabled) return "#6b7280";
-            if (s.state === "connected") return "#22c55e";
-            if (s.state === "connecting" || s.state === "reconnecting") return "#eab308";
-            if (s.state === "error" || s.state === "dead") return "#ef4444";
+            var st = (s.state || "").toLowerCase();
+            if (st === "connected") return "#22c55e";
+            if (st === "connecting" || st === "reconnecting") return "#eab308";
+            if (st === "error" || st === "dead") return "#ef4444";
+            if (!sourceIsActive(s)) return "#6b7280";
             return "#6b7280";
         }
 
         function sourceTrailing(s) {
-            if (!s.enabled) return "disabled";
+            if (!sourceIsActive(s)) return s.state || "disabled";
             if (s.state && s.state !== "connected") return s.state;
             return s.rate.toFixed(1) + "/s";
         }
