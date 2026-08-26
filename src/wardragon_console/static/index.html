@@ -113,6 +113,38 @@
         </div>
       </div>
       <div id="config-status" class="notice"></div>
+
+      <article class="config-editor" id="kit-id-override">
+        <div class="config-header">
+          <div>
+            <h2>Kit ID</h2>
+            <div class="config-path" id="kit-id-override-path">Optional custom suffix; leave blank to use the auto-detected serial.</div>
+          </div>
+        </div>
+        <div class="cert-grid">
+          <label class="form-field">
+            <span>Custom suffix
+              <em class="hint" title="Alphanumeric, dot, underscore, hyphen. 1&ndash;32 characters. The 'wardragon-' prefix is always applied and is not overridable.">?</em>
+            </span>
+            <input id="kit-id-override-input" type="text" autocomplete="off" spellcheck="false" placeholder="rooftop-1" maxlength="32">
+          </label>
+          <div class="form-field kit-id-preview-field">
+            <span>Full Kit ID (preview)</span>
+            <code id="kit-id-override-preview">wardragon-&lt;serial&gt;</code>
+          </div>
+        </div>
+        <p class="notice warn" id="kit-id-override-warning">
+          Changing the Kit ID renames this kit's identity across CoT UIDs, MQTT topics, and any Nexus/Lattice attribution.
+          Downstream consumers that filter or key on the old ID will need to be updated. Restart the wardragon-monitor
+          service (or the whole kit) for the change to take effect.
+        </p>
+        <div class="toolbar-actions">
+          <button id="kit-id-override-save" class="primary" type="button">Save</button>
+          <button id="kit-id-override-clear" class="secondary" type="button">Clear (revert to serial)</button>
+        </div>
+        <div id="kit-id-override-status" class="notice"></div>
+      </article>
+
       <article class="config-editor" id="cert-upload">
         <div class="config-header">
           <div>
