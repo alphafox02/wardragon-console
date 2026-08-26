@@ -76,6 +76,9 @@ document.getElementById("restart-dragonsync").addEventListener("click", restartD
 document.getElementById("upload-cert").addEventListener("click", uploadCertificate);
 document.getElementById("check-updates").addEventListener("click", checkForUpdates);
 document.getElementById("dragonscope-save").addEventListener("click", saveDragonscope);
+document.getElementById("kit-id-override-save").addEventListener("click", saveKitIdOverride);
+document.getElementById("kit-id-override-clear").addEventListener("click", clearKitIdOverride);
+document.getElementById("kit-id-override-input").addEventListener("input", updateKitIdPreview);
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-reveal]");
   if (!button) return;
@@ -96,6 +99,7 @@ async function loadSnapshot() {
 }
 
 async function loadConfig() {
+  loadKitIdOverride();
   try {
     const response = await fetch("/api/config", { cache: "no-store" });
     state.config = await response.json();
@@ -179,6 +183,100 @@ async function saveDragonscope() {
   } catch (error) {
     notice.className = "notice error";
     notice.textContent = `Save failed: ${error.message || error}`;
+  } finally {
+    delete button.dataset.busy;
+    button.disabled = false;
+  }
+}
+
+const KIT_ID_OVERRIDE_RE = /^[A-Za-z0-9._-]{1,32}$/;
+
+function updateKitIdPreview() {
+  const value = document.getElementById("kit-id-override-input").value.trim();
+  const preview = document.getElementById("kit-id-override-preview");
+  preview.textContent = value ? `wardragon-${value}` : "wardragon-<serial>";
+}
+
+async function loadKitIdOverride() {
+  const input = document.getElementById("kit-id-override-input");
+  const pathEl = document.getElementById("kit-id-override-path");
+  const notice = document.getElementById("kit-id-override-status");
+  try {
+    const response = await fetch("/api/kit-id-override", { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || response.statusText);
+    input.value = payload.value || "";
+    if (payload.path) {
+      pathEl.textContent = `File: ${payload.path} · ${payload.exists ? "override active" : "no override — using auto-detected serial"}`;
+    }
+    updateKitIdPreview();
+    notice.className = "notice";
+    notice.textContent = "";
+  } catch (error) {
+    notice.className = "notice error";
+    notice.textContent = `Load failed: ${error.message || error}`;
+  }
+}
+
+async function saveKitIdOverride() {
+  const button = document.getElementById("kit-id-override-save");
+  const notice = document.getElementById("kit-id-override-status");
+  if (button.dataset.busy === "1") return;
+  const value = document.getElementById("kit-id-override-input").value.trim();
+  if (!value) {
+    notice.className = "notice error";
+    notice.textContent = "Enter a suffix, or use Clear to remove the override.";
+    return;
+  }
+  if (!KIT_ID_OVERRIDE_RE.test(value)) {
+    notice.className = "notice error";
+    notice.textContent = "Invalid suffix: alphanumeric, dot, underscore, hyphen only (1–32 chars).";
+    return;
+  }
+  button.dataset.busy = "1";
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/kit-id-override", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || response.statusText);
+    notice.className = "notice ok";
+    notice.textContent = `Saved kit-id-override = "${payload.value}". Restart wardragon-monitor for the change to take effect.`;
+    await loadKitIdOverride();
+  } catch (error) {
+    notice.className = "notice error";
+    notice.textContent = `Save failed: ${error.message || error}`;
+  } finally {
+    delete button.dataset.busy;
+    button.disabled = false;
+  }
+}
+
+async function clearKitIdOverride() {
+  const button = document.getElementById("kit-id-override-clear");
+  const notice = document.getElementById("kit-id-override-status");
+  if (button.dataset.busy === "1") return;
+  if (!confirm("Clear the Kit ID override and revert to the auto-detected serial?")) return;
+  button.dataset.busy = "1";
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/kit-id-override", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: "" }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || response.statusText);
+    notice.className = "notice ok";
+    notice.textContent = "Override cleared. Restart wardragon-monitor to fall back to the auto-detected serial.";
+    document.getElementById("kit-id-override-input").value = "";
+    await loadKitIdOverride();
+  } catch (error) {
+    notice.className = "notice error";
+    notice.textContent = `Clear failed: ${error.message || error}`;
   } finally {
     delete button.dataset.busy;
     button.disabled = false;
