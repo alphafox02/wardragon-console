@@ -1,5 +1,15 @@
 # WarDragon Console
 
+## A note
+
+I built and maintain the open-source components in this repository. The WarDragon Pro and Elite commercial kits include additional in-house capabilities that are not detailed here and are not covered by the license of this repository.
+
+For production evaluation or procurement, please contact [cemaxecuter.com](https://cemaxecuter.com). The open-source work in this repository remains open, and contributions are welcome.
+
+— Aaron
+
+---
+
 A local web console for [WarDragon](https://github.com/alphafox02/WarDragon) drone detection kits. It runs on the kit and answers two questions: is this kit healthy, and what is it seeing right now? It also lets an operator with physical access (HDMI/keyboard, USB tether tablet, or SSH tunnel) edit a curated subset of DragonSync and DragonScope configuration without ever touching the raw files by hand.
 
 ## Current Scope
