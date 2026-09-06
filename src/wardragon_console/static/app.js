@@ -530,8 +530,11 @@ function renderSignals(signals) {
     document.getElementById("signals-table").innerHTML = `<div class="subtle">No current signals</div>`;
     return;
   }
-  document.getElementById("signals-table").innerHTML = table(["Source", "Frequency", "RSSI", "Type", "Updated"],
+  // Contact first: source says how a detection was confirmed, which every
+  // contact of a kind shares. The callsign names which link it actually is.
+  document.getElementById("signals-table").innerHTML = table(["Contact", "Source", "Frequency", "RSSI", "Type", "Updated"],
     signals.map((signal) => [
+      signal.callsign || signal.alert_id || signal.uid || "N/A",
       signal.source || signal.seen_by || "N/A",
       signal.freq || signal.frequency || signal.center_hz || "N/A",
       signal.rssi ?? "N/A",
