@@ -43,6 +43,7 @@ class Settings:
     update_check_enabled: bool = True
     console_upstream_repo: str = "alphafox02/wardragon-console"
     dragonsync_upstream_repo: str = "alphafox02/DragonSync"
+    dragonscope_license_check_enabled: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -78,6 +79,7 @@ class Settings:
             update_check_enabled=_env_bool("WARDRAGON_CONSOLE_UPDATE_CHECK", True),
             console_upstream_repo=os.environ.get("WARDRAGON_CONSOLE_UPSTREAM_REPO", "alphafox02/wardragon-console"),
             dragonsync_upstream_repo=os.environ.get("WARDRAGON_DRAGONSYNC_UPSTREAM_REPO", "alphafox02/DragonSync"),
+            dragonscope_license_check_enabled=_env_bool("WARDRAGON_DRAGONSCOPE_LICENSE_CHECK", True),
         )
 
     def can_write_config(self) -> bool:

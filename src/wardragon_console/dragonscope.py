@@ -19,11 +19,19 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit, urlunsplit
+from urllib.request import Request, urlopen
 
+from . import __version__
 from .config_schema import Field, Group
 from .settings import Settings
 
 LOG = logging.getLogger(__name__)
+
+LICENSE_REQUEST_TIMEOUT = 5.0
+LICENSE_RESPONSE_BYTE_CAP = 64 * 1024
+LICENSE_PATH = "/me"
 
 CONFIG_FILENAME = "dragonscope.cfg"
 AUTO_RELOAD_SECONDS = 30
@@ -221,3 +229,73 @@ def _coerce(field: Field, value: Any) -> Any:
 def _is_sensitive(key: str) -> bool:
     lower = key.lower()
     return any(name in lower for name in SENSITIVE_NAMES)
+
+
+def check_license(settings: Settings) -> dict[str, Any]:
+    """Verify the license against /me on the configured remote."""
+    if not settings.dragonscope_license_check_enabled:
+        raise PermissionError("license check is disabled")
+
+    path = settings.dragonscope_dir / CONFIG_FILENAME
+    values, parse_error = _load_values(path)
+    if parse_error:
+        return {"ok": False, "error": f"could not read {CONFIG_FILENAME}: {parse_error}"}
+
+    remote = str(values.get("remote", "")).strip().rstrip("/")
+    key = str(values.get("license_key", "")).strip()
+
+    if not remote or remote in ("https://CHANGE_ME", "CHANGE_ME"):
+        return {"ok": False, "error": "no remote URL configured in dragonscope.cfg"}
+    if not key or key in ("CHANGE_ME",):
+        return {"ok": False, "error": "no license key configured in dragonscope.cfg"}
+
+    try:
+        parts = urlsplit(remote)
+    except ValueError as exc:
+        return {"ok": False, "error": f"invalid remote URL: {exc}"}
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return {"ok": False, "error": "remote URL must be http:// or https:// with a host"}
+    check_url = urlunsplit((parts.scheme, parts.netloc, LICENSE_PATH, "", ""))
+
+    req = Request(
+        check_url,
+        headers={
+            "x-api-key": key,
+            "Accept": "application/json",
+            "User-Agent": f"wardragon-console/{__version__}",
+        },
+    )
+    try:
+        with urlopen(req, timeout=LICENSE_REQUEST_TIMEOUT) as resp:
+            raw = resp.read(LICENSE_RESPONSE_BYTE_CAP)
+    except HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read(1024).decode("utf-8", errors="replace")
+        except Exception:
+            pass
+        if exc.code == 401:
+            reason = "license key missing or invalid"
+        elif exc.code == 403:
+            reason = "license key rejected"
+        else:
+            reason = f"HTTP {exc.code}"
+        LOG.info("license check %s -> %s", check_url, exc.code)
+        return {"ok": False, "error": reason, "status": exc.code, "body": body[:256]}
+    except (URLError, TimeoutError, OSError) as exc:
+        LOG.info("license check %s -> %s", check_url, exc)
+        return {"ok": False, "error": f"cannot reach license API: {exc}"}
+
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return {"ok": False, "error": f"invalid response: {exc}"}
+    if not isinstance(data, dict):
+        return {"ok": False, "error": "response was not a JSON object"}
+
+    return {
+        "ok": True,
+        "checked_at": time.time(),
+        "endpoint": check_url,
+        "data": data,
+    }

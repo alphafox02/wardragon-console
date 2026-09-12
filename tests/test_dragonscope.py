@@ -1,10 +1,14 @@
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 
 from wardragon_console.dragonscope import (
     SECRET_PLACEHOLDER,
+    check_license,
     read_dragonscope,
     write_dragonscope,
 )
@@ -131,6 +135,122 @@ class DragonscopeTests(unittest.TestCase):
             settings = self._settings(root)
             with self.assertRaises(ValueError):
                 write_dragonscope(settings, {"listen_port": 99999})
+
+
+class CheckLicenseTests(unittest.TestCase):
+    def _settings(self, root: Path, **overrides) -> Settings:
+        return Settings(
+            dragonscope_dir=root,
+            bind_host="127.0.0.1",
+            **overrides,
+        )
+
+    def _write_cfg(self, root: Path, remote="https://api.example.test", key="dk_valid"):
+        (root / "dragonscope.cfg").write_text(json.dumps({
+            "remote": remote,
+            "license_key": key,
+            "listen_port": 80,
+            "listen_addr": "0.0.0.0",
+        }), encoding="utf-8")
+
+    def test_disabled_raises_permission_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_cfg(root)
+            settings = self._settings(root, dragonscope_license_check_enabled=False)
+            with self.assertRaises(PermissionError):
+                check_license(settings)
+
+    def test_missing_key_returns_clean_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_cfg(root, key="CHANGE_ME")
+            settings = self._settings(root)
+            result = check_license(settings)
+            self.assertFalse(result["ok"])
+            self.assertIn("license key", result["error"].lower())
+
+    def test_missing_remote_returns_clean_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_cfg(root, remote="https://CHANGE_ME")
+            settings = self._settings(root)
+            result = check_license(settings)
+            self.assertFalse(result["ok"])
+            self.assertIn("remote", result["error"].lower())
+
+    def test_invalid_remote_url_returns_clean_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_cfg(root, remote="not-a-url")
+            settings = self._settings(root)
+            result = check_license(settings)
+            self.assertFalse(result["ok"])
+            self.assertIn("http", result["error"].lower())
+
+    def test_happy_path_parses_response(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_cfg(root)
+            settings = self._settings(root)
+            body = json.dumps({
+                "owner": "acme", "tier": "enterprise", "active": True,
+                "billing_status": "trial", "bound": False,
+                "expires_in_days": None, "paid_through_in_days": None,
+                "month": "2026-09",
+                "cryp_used": 5, "cryp_quota": -1,
+                "infp_used": 10, "infp_quota": -1,
+                "drones_seen_30d": 3,
+            }).encode("utf-8")
+
+            class FakeResp:
+                def __init__(self, data): self._data = data
+                def read(self, n=None): return self._data
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+
+            with patch("wardragon_console.dragonscope.urlopen", return_value=FakeResp(body)):
+                result = check_license(settings)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["data"]["owner"], "acme")
+            self.assertTrue(result["data"]["active"])
+            self.assertIsNone(result["data"]["expires_in_days"])
+            self.assertEqual(result["data"]["cryp_quota"], -1)
+            self.assertIn("/me", result["endpoint"])
+
+    def test_http_401_returns_invalid_key_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_cfg(root)
+            settings = self._settings(root)
+            err = HTTPError("https://api.example.test/me", 401, "Unauthorized", {}, io.BytesIO(b'{"detail":"bad key"}'))
+            with patch("wardragon_console.dragonscope.urlopen", side_effect=err):
+                result = check_license(settings)
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["status"], 401)
+            self.assertIn("invalid", result["error"].lower())
+
+    def test_http_403_returns_rejected_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_cfg(root)
+            settings = self._settings(root)
+            err = HTTPError("https://api.example.test/me", 403, "Forbidden", {}, io.BytesIO(b""))
+            with patch("wardragon_console.dragonscope.urlopen", side_effect=err):
+                result = check_license(settings)
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["status"], 403)
+            self.assertIn("rejected", result["error"].lower())
+
+    def test_network_failure_returns_clean_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_cfg(root)
+            settings = self._settings(root)
+            with patch("wardragon_console.dragonscope.urlopen", side_effect=URLError("no route")):
+                result = check_license(settings)
+            self.assertFalse(result["ok"])
+            self.assertIn("cannot reach", result["error"].lower())
 
 
 if __name__ == "__main__":

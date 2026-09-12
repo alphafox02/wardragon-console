@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from .actions import restart_dragonsync
 from .config_view import read_config_files, write_config_file, write_curated_config
 from .certs import upload_tak_cert
-from .dragonscope import read_dragonscope, write_dragonscope
+from .dragonscope import check_license, read_dragonscope, write_dragonscope
 from .kit_id import read_override as read_kit_id_override, write_override as write_kit_id_override
 from .settings import Settings
 from .state import SnapshotStore, SourceTiming
@@ -189,7 +189,12 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
-        if path in {"/api/actions/restart-dragonsync", "/api/certs/tak", "/api/updates/check"} and not self._check_origin():
+        if path in {
+            "/api/actions/restart-dragonsync",
+            "/api/certs/tak",
+            "/api/updates/check",
+            "/api/dragonscope/license/check",
+        } and not self._check_origin():
             self.send_error(HTTPStatus.FORBIDDEN, "cross-origin request rejected")
             return
         if path == "/api/actions/restart-dragonsync":
@@ -220,6 +225,20 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
                 self._write_json({"ok": False, "error": str(exc)}, status=500)
                 return
             self._write_json({"ok": True, **result})
+            return
+
+        if path == "/api/dragonscope/license/check":
+            try:
+                result = check_license(self.server.settings)
+            except PermissionError as exc:
+                self._write_json({"ok": False, "error": str(exc)}, status=403)
+                return
+            except Exception as exc:
+                LOG.exception("license check failed")
+                self._write_json({"ok": False, "error": str(exc)}, status=500)
+                return
+            self.server.store.update("dragonscope_license", result)
+            self._write_json(result)
             return
 
         self.send_error(HTTPStatus.NOT_FOUND)

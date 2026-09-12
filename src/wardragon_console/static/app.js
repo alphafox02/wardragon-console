@@ -76,6 +76,7 @@ document.getElementById("restart-dragonsync").addEventListener("click", restartD
 document.getElementById("upload-cert").addEventListener("click", uploadCertificate);
 document.getElementById("check-updates").addEventListener("click", checkForUpdates);
 document.getElementById("dragonscope-save").addEventListener("click", saveDragonscope);
+document.getElementById("dragonscope-check-license").addEventListener("click", checkDragonscopeLicense);
 document.getElementById("kit-id-override-save").addEventListener("click", saveKitIdOverride);
 document.getElementById("kit-id-override-clear").addEventListener("click", clearKitIdOverride);
 document.getElementById("kit-id-override-input").addEventListener("input", updateKitIdPreview);
@@ -121,6 +122,92 @@ async function loadDragonscope() {
     notice.className = "notice error";
     notice.textContent = `DragonScope config unavailable: ${error}`;
   }
+  // If a previous license check is cached in the snapshot, re-render it so the
+  // card is visible when the operator opens the tab again.
+  const cached = state.snapshot?.dragonscope_license;
+  if (cached && (cached.ok !== undefined || cached.error)) {
+    renderDragonscopeLicense(cached);
+  }
+}
+
+async function checkDragonscopeLicense() {
+  const button = document.getElementById("dragonscope-check-license");
+  const card = document.getElementById("dragonscope-license-card");
+  const content = document.getElementById("dragonscope-license-content");
+  if (button.dataset.busy === "1") return;
+  button.dataset.busy = "1";
+  button.disabled = true;
+  card.hidden = false;
+  content.innerHTML = `<div class="subtle">Checking license…</div>`;
+  try {
+    const response = await fetch("/api/dragonscope/license/check", { method: "POST" });
+    const payload = await response.json();
+    renderDragonscopeLicense(payload);
+  } catch (error) {
+    renderDragonscopeLicense({ ok: false, error: String(error.message || error) });
+  } finally {
+    delete button.dataset.busy;
+    button.disabled = false;
+  }
+}
+
+function renderDragonscopeLicense(payload) {
+  const card = document.getElementById("dragonscope-license-card");
+  const content = document.getElementById("dragonscope-license-content");
+  card.hidden = false;
+  if (!payload || !payload.ok) {
+    const msg = payload?.error || "unknown error";
+    content.innerHTML = `
+      <div class="license-header">
+        <h3>License</h3>
+        <span class="license-badge license-badge-error"><span class="status-dot state-error"></span> Error</span>
+      </div>
+      <div class="notice error">${escapeHtml(msg)}</div>`;
+    return;
+  }
+  const d = payload.data || {};
+  const active = d.active === true;
+  const badge = active
+    ? `<span class="license-badge license-badge-ok"><span class="status-dot state-healthy"></span> Active</span>`
+    : `<span class="license-badge license-badge-error"><span class="status-dot state-error"></span> Inactive</span>`;
+  const expiry = d.expires_in_days == null
+    ? "no expiry"
+    : `${d.expires_in_days} day${d.expires_in_days === 1 ? "" : "s"}`;
+  const usage = (used, quota, label) => {
+    const u = Number(used ?? 0);
+    if (quota === -1 || quota == null) {
+      return `<div class="license-usage-row"><span>${label}</span><span>${u} · unlimited</span></div>`;
+    }
+    const q = Number(quota);
+    const pct = q > 0 ? Math.min(100, Math.round((u / q) * 100)) : 0;
+    return `
+      <div class="license-usage-row"><span>${label}</span><span>${u} / ${q}</span></div>
+      <div class="license-usage-bar"><div class="license-usage-fill" style="width:${pct}%"></div></div>`;
+  };
+  const checkedAt = payload.checked_at
+    ? new Date(payload.checked_at * 1000).toLocaleTimeString()
+    : "";
+  const drones = d.drones_seen_30d ?? 0;
+  const month = d.month || "";
+  content.innerHTML = `
+    <div class="license-header">
+      <h3>License</h3>
+      ${badge}
+    </div>
+    <dl class="license-body">
+      <dt>Owner</dt><dd>${escapeHtml(d.owner || "—")}</dd>
+      <dt>Tier</dt><dd>${escapeHtml(d.tier || "—")}</dd>
+      <dt>Billing</dt><dd>${escapeHtml(d.billing_status || "—")}</dd>
+      <dt>Expires</dt><dd>${escapeHtml(expiry)}</dd>
+      ${d.bound ? "<dt>Device</dt><dd>bound</dd>" : ""}
+    </dl>
+    <div class="license-usage">
+      ${usage(d.cryp_used, d.cryp_quota, "CRYP")}
+      ${usage(d.infp_used, d.infp_quota, "INFP")}
+    </div>
+    <div class="license-footer subtle">
+      ${drones} drone${drones === 1 ? "" : "s"} seen in 30d${month ? " · " + escapeHtml(month) : ""}${checkedAt ? " · checked " + escapeHtml(checkedAt) : ""}
+    </div>`;
 }
 
 function renderDragonscope() {

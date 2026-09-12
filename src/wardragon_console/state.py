@@ -31,6 +31,7 @@ class SnapshotStore:
             "drones": {"payload": {"drones": []}, "seen_at": None, "error": None},
             "signals": {"payload": {"signals": []}, "seen_at": None, "error": None},
             "updates": {"payload": None, "seen_at": None, "error": None},
+            "dragonscope_license": {"payload": None, "seen_at": None, "error": None},
         }
 
     @property
@@ -86,6 +87,7 @@ class SnapshotStore:
             },
             "capabilities": self._capabilities,
             "updates": data["updates"]["payload"] or {},
+            "dragonscope_license": data["dragonscope_license"]["payload"] or {},
         }
 
     def _service_state(self, seen_at: float | None, now: float, timing: SourceTiming) -> dict[str, Any]:

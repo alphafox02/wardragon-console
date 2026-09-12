@@ -614,3 +614,93 @@ select:disabled {
 .compact-screen main {
   padding-top: 12px;
 }
+
+.license-card {
+  margin-top: 14px;
+}
+
+.license-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.license-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.license-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.license-badge-ok {
+  color: var(--green);
+}
+
+.license-badge-error {
+  color: var(--red);
+}
+
+.license-body {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) 1fr;
+  gap: 5px 14px;
+  margin: 0;
+}
+
+.license-body dt {
+  color: var(--muted);
+}
+
+.license-body dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.license-usage {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 6px;
+}
+
+.license-usage-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.license-usage-row > span:first-child {
+  color: var(--muted);
+}
+
+.license-usage-bar {
+  height: 6px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.license-usage-fill {
+  height: 100%;
+  background: var(--blue);
+}
+
+.license-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 0.82rem;
+}
