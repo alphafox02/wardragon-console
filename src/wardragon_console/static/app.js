@@ -462,13 +462,24 @@ function renderOperatorNotes(snap) {
   document.getElementById("operator-notes").innerHTML = notes.map((note) => `<div class="note">${escapeHtml(note)}</div>`).join("");
 }
 
+// Receivers shown on the Receivers tab and their operator-facing labels.
+// Newer WarDragon kits do not ship UART or Sniffle sources, and their
+// presence in the UI has been confusing operators — so we filter to just
+// the three receivers that are relevant. Keys match droneid-go's source
+// names (lowercase). Order controls display order.
+const RECEIVER_LABELS = { wifi: "WiFi", ble: "BLE", dji: "DragonSDR" };
+const RECEIVER_ORDER = ["wifi", "ble", "dji"];
+
 function renderDroneid(health) {
   const target = document.getElementById("droneid-sources");
   if (!health || !health.sources) {
     target.innerHTML = `<div class="subtle">No health snapshot</div>`;
     return;
   }
-  target.innerHTML = Object.values(health.sources).map((source) => {
+  const rows = Object.entries(health.sources)
+    .filter(([key]) => key.toLowerCase() in RECEIVER_LABELS)
+    .sort(([a], [b]) => RECEIVER_ORDER.indexOf(a.toLowerCase()) - RECEIVER_ORDER.indexOf(b.toLowerCase()))
+    .map(([key, source]) => {
     // Prefer state_str for the running-vs-disabled decision. Observed in the
     // field: droneid-go can leave `enabled: false` even when a receiver is
     // clearly running (state_str=connected, messages flowing). Trusting
@@ -479,16 +490,18 @@ function renderDroneid(health) {
     const activeStates = new Set(["connected", "connecting", "reconnecting"]);
     const isActive = activeStates.has(state) || (source.enabled && state !== "disabled");
     const label = isActive ? (source.state_str || "unknown") : (source.state_str || "disabled");
+    const displayName = RECEIVER_LABELS[key.toLowerCase()] || source.name || key;
     return `
     <div class="receiver-row">
       <span class="status-dot ${isActive ? sourceStateClass(source.state_str) : ""}"></span>
       <div>
-        <strong>${escapeHtml(source.name)}</strong>
+        <strong>${escapeHtml(displayName)}</strong>
         <div class="subtle">${escapeHtml(label)}</div>
       </div>
       <span class="pill">${fmt.number(source.messages_per_sec || 0, 2)}/s · ${source.messages_total || 0}</span>
     </div>`;
-  }).join("");
+    }).join("");
+  target.innerHTML = rows || `<div class="subtle">No receivers to display</div>`;
 }
 
 function renderDragonsig(health, service) {

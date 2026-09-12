@@ -49,7 +49,7 @@ case "$FRAME" in
     b_r=$(q '.droneid.payload.sources.ble.messages_per_sec // 0')
     d_st=$(q '.droneid.payload.sources.dji.state_str // "?"')
     d_r=$(q '.droneid.payload.sources.dji.messages_per_sec // 0')
-    text=$(printf "<span foreground='#%s'>●</span> WiFi %.1f/s     <span foreground='#%s'>●</span> BLE %.1f/s     <span foreground='#%s'>●</span> DJI %.1f/s" \
+    text=$(printf "<span foreground='#%s'>●</span> WiFi %.1f/s     <span foreground='#%s'>●</span> BLE %.1f/s     <span foreground='#%s'>●</span> DragonSDR %.1f/s" \
       "$(state_color "$w_st")" "$w_r" \
       "$(state_color "$b_st")" "$b_r" \
       "$(state_color "$d_st")" "$d_r")

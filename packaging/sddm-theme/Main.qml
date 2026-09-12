@@ -287,7 +287,7 @@ Rectangle {
             var nm = (name || "").toLowerCase();
             if (nm === "wifi") return "WiFi";
             if (nm === "ble") return "BLE";
-            if (nm === "dji") return "DJI";
+            if (nm === "dji") return "DragonSDR";
             if (nm === "uart") return "UART";
             if (nm.length > 0) return nm.charAt(0).toUpperCase() + nm.slice(1);
             return name;
