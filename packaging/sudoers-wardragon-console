@@ -1,2 +1,5 @@
 dragon ALL=(root) NOPASSWD: /bin/systemctl restart dragonsync.service
 dragon ALL=(root) NOPASSWD: /usr/local/bin/wardragon-tether-alias *
+dragon ALL=(root) NOPASSWD: /usr/local/bin/wardragon-upgrade start console
+dragon ALL=(root) NOPASSWD: /usr/local/bin/wardragon-upgrade start droneid
+dragon ALL=(root) NOPASSWD: /usr/local/bin/wardragon-upgrade start dragonsync

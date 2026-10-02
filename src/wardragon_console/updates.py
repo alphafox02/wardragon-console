@@ -37,12 +37,17 @@ def check_for_updates(settings: Settings, store: SnapshotStore | None = None) ->
         "console": _check_repo(
             repo=settings.console_upstream_repo,
             local_version=__version__,
-            local_git_dir=None,
+            local_git_dir=settings.console_repo_dir,
         ),
         "dragonsync": _check_repo(
             repo=settings.dragonsync_upstream_repo,
             local_version=None,
             local_git_dir=settings.dragonsync_dir,
+        ),
+        "droneid": _check_repo(
+            repo=settings.droneid_upstream_repo,
+            local_version=None,
+            local_git_dir=settings.droneid_dir,
         ),
         "checked_at": time.time(),
     }
@@ -87,9 +92,8 @@ def _check_repo(
         out["latest_release_tag"] = release.get("tag_name")
         out["latest_release_url"] = release.get("html_url")
 
-    # Decide "update available". Prefer SHA comparison when both sides have
-    # one (DragonSync case). Otherwise compare local_version to release tag
-    # (console case once we start tagging releases).
+    # Prefer SHA comparison when the local checkout is a git repo; otherwise
+    # compare local_version to the latest release tag.
     if out["local_sha"] and out["upstream_sha"]:
         if out["local_sha"] != out["upstream_sha"]:
             out["update_available"] = True

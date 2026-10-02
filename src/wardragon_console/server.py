@@ -17,6 +17,7 @@ from .kit_id import read_override as read_kit_id_override, write_override as wri
 from .settings import Settings
 from .state import SnapshotStore, SourceTiming
 from .updates import check_for_updates
+from .upgrade import TARGETS as UPGRADE_TARGETS, helper_installed, start_upgrade, upgrade_status
 
 LOG = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).with_name("static")
@@ -84,6 +85,13 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/health":
             self._write_json({"ok": True, "bind": f"{self.server.settings.bind_host}:{self.server.settings.bind_port}"})
+            return
+        if path.startswith("/api/upgrade/"):
+            target = path.removeprefix("/api/upgrade/")
+            if target not in UPGRADE_TARGETS:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            self._write_json(upgrade_status(target))
             return
         if path.startswith("/static/"):
             self._serve_static(path.removeprefix("/static/"))
@@ -194,7 +202,7 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             "/api/certs/tak",
             "/api/updates/check",
             "/api/dragonscope/license/check",
-        } and not self._check_origin():
+        } | {f"/api/upgrade/{t}" for t in UPGRADE_TARGETS} and not self._check_origin():
             self.send_error(HTTPStatus.FORBIDDEN, "cross-origin request rejected")
             return
         if path == "/api/actions/restart-dragonsync":
@@ -241,6 +249,23 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             self._write_json(result)
             return
 
+        if path.startswith("/api/upgrade/"):
+            target = path.removeprefix("/api/upgrade/")
+            if target not in UPGRADE_TARGETS:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            try:
+                result = start_upgrade(self.server.settings, target)
+            except PermissionError as exc:
+                self._write_json({"ok": False, "error": str(exc)}, status=403)
+                return
+            except Exception as exc:
+                LOG.exception("upgrade start failed")
+                self._write_json({"ok": False, "error": str(exc)}, status=500)
+                return
+            self._write_json(result, status=200 if result.get("ok") else 409)
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def _snapshot(self) -> dict[str, Any]:
@@ -259,6 +284,8 @@ class ConsoleRequestHandler(BaseHTTPRequestHandler):
             "current_bind": f"{settings.bind_host}:{settings.bind_port}",
             "config_write_allowed": settings.can_write_config(),
             "restart_allowed": settings.can_restart_dragonsync(),
+            "upgrade_allowed": settings.can_upgrade(),
+            "upgrade_helper_installed": helper_installed(),
             "tether": tether_status,
         }
         return snapshot

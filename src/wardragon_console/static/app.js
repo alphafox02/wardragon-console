@@ -442,7 +442,20 @@ function renderSnapshot() {
   versionInfo.Generated = new Date(snap.generated_at * 1000).toLocaleString();
   renderDl("version-info", versionInfo);
   renderUpdates(snap.updates || {});
+  resumeUpgradeStatus();
 }
+
+const UPDATE_REPOS = [
+  ["console", "WarDragon Console"],
+  ["droneid", "droneid-go"],
+  ["dragonsync", "DragonSync"],
+];
+const UPGRADE_CONFIRM = {
+  console: "Upgrade WarDragon Console?\n\nThe console restarts during the upgrade; this page reconnects on its own.",
+  droneid: "Upgrade droneid-go?\n\nDetection pauses for a few seconds while zmq-decoder restarts.",
+  dragonsync: "Upgrade DragonSync?\n\nYour config.ini and gps.ini settings are carried over and a backup copy is kept. DragonSync restarts afterwards.",
+};
+const UPGRADE_TERMINAL = new Set(["completed", "completed_with_warnings", "failed", "refused", "up_to_date", "interrupted"]);
 
 function renderUpdates(updates) {
   const target = document.getElementById("update-info");
@@ -450,10 +463,13 @@ function renderUpdates(updates) {
     target.innerHTML = `<div class="subtle">Click "Check for updates" to query GitHub.</div>`;
     return;
   }
-  const sections = ["console", "dragonsync"].map((key) => {
+  const access = state.snapshot?.access || {};
+  const busy = Boolean(state.upgrade && !state.upgrade.done);
+  let offeredUpgrade = false;
+  let needsHelper = false;
+  const sections = UPDATE_REPOS.map(([key, repoLabel]) => {
     const info = updates[key];
     if (!info) return "";
-    const repoLabel = key === "console" ? "WarDragon Console" : "DragonSync";
     const repoLink = info.repo ? `<a href="https://github.com/${escapeAttr(info.repo)}" target="_blank" rel="noopener">${escapeHtml(info.repo)}</a>` : "";
     const rows = {};
     if (info.local_version) rows["Local version"] = info.local_version;
@@ -474,10 +490,136 @@ function renderUpdates(updates) {
       rows["Status"] = "up to date";
     }
     const items = Object.entries(rows).map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${v}</dd>`).join("");
-    return `<div class="update-row"><h3>${escapeHtml(repoLabel)}</h3><div class="update-repo subtle">${repoLink}</div><dl>${items}</dl></div>`;
+    let action = "";
+    if (info.update_available && !info.error && access.upgrade_allowed) {
+      if (access.upgrade_helper_installed) {
+        offeredUpgrade = true;
+        action = `<button class="secondary upgrade-btn" type="button" data-target="${escapeAttr(key)}"${busy ? " disabled" : ""}>Upgrade</button>`;
+      } else {
+        needsHelper = true;
+      }
+    }
+    return `<div class="update-row"><div class="config-header"><h3>${escapeHtml(repoLabel)}</h3>${action}</div><div class="update-repo subtle">${repoLink}</div><dl>${items}</dl></div>`;
   }).join("");
   const checked = new Date(updates.checked_at * 1000).toLocaleString();
-  target.innerHTML = `${sections}<div class="subtle update-checked">Checked ${escapeHtml(checked)}</div>`;
+  let notice = "";
+  if (offeredUpgrade) {
+    notice = `<div class="notice warn">Upgrade is for stock WarDragon installs. It pulls the latest code from GitHub and reinstalls; DragonSync settings are carried over. Kits with local code changes or customized services are left untouched and should be upgraded manually.</div>`;
+  } else if (needsHelper) {
+    notice = `<div class="notice">To upgrade from this page, run <code>sudo packaging/install.sh</code> once from the wardragon-console folder.</div>`;
+  }
+  target.innerHTML = `${notice}${sections}<div class="subtle update-checked">Checked ${escapeHtml(checked)}</div>`;
+}
+
+document.getElementById("update-info").addEventListener("click", (event) => {
+  const button = event.target.closest(".upgrade-btn");
+  if (button) startUpgrade(button.dataset.target);
+});
+
+async function startUpgrade(target) {
+  if (state.upgrade && !state.upgrade.done) return;
+  if (!UPGRADE_CONFIRM[target] || !window.confirm(UPGRADE_CONFIRM[target])) return;
+  state.upgrade = { target, requestedAt: null, done: false };
+  renderUpgradeProgress({ state: "starting", message: "Starting upgrade…" }, "");
+  try {
+    const response = await fetch(`/api/upgrade/${encodeURIComponent(target)}`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || response.statusText);
+    state.upgrade.requestedAt = payload.requested_at;
+  } catch (error) {
+    state.upgrade.done = true;
+    renderUpgradeProgress({ state: "failed", message: error.message || String(error) }, "");
+    return;
+  }
+  pollUpgrade();
+}
+
+async function pollUpgrade() {
+  const upgrade = state.upgrade;
+  if (!upgrade || upgrade.done) return;
+  try {
+    const response = await fetch(`/api/upgrade/${encodeURIComponent(upgrade.target)}`, { cache: "no-store" });
+    const payload = await response.json();
+    const status = payload.status;
+    const current = status && (!upgrade.requestedAt || (status.started_at || 0) >= upgrade.requestedAt - 5);
+    if (current) {
+      renderUpgradeProgress(status, payload.log || "");
+      if (UPGRADE_TERMINAL.has(status.state)) {
+        finishUpgrade(status);
+        return;
+      }
+    }
+  } catch (error) {
+    if (upgrade.target === "console") {
+      renderUpgradeProgress({ state: "running", message: "Console is restarting…" }, null);
+    }
+  }
+  setTimeout(pollUpgrade, 2000);
+}
+
+function finishUpgrade(status) {
+  state.upgrade.done = true;
+  const changed = status.state === "completed" || status.state === "completed_with_warnings";
+  if (changed && state.upgrade.target === "console") {
+    const panel = document.getElementById("upgrade-progress");
+    panel.insertAdjacentHTML("beforeend", `<div class="notice ok">Reloading the page to load the new console…</div>`);
+    setTimeout(() => window.location.reload(), 3000);
+    return;
+  }
+  if (changed) checkForUpdates();
+}
+
+function renderUpgradeProgress(status, log) {
+  const panel = document.getElementById("upgrade-progress");
+  const label = Object.fromEntries(UPDATE_REPOS)[state.upgrade?.target] || "Upgrade";
+  const tone = {
+    completed: "ok",
+    up_to_date: "ok",
+    completed_with_warnings: "warn",
+    refused: "warn",
+    interrupted: "error",
+    failed: "error",
+  }[status.state] || "";
+  const list = (items, cls) => (items && items.length)
+    ? `<ul class="upgrade-list ${cls}">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : "";
+  const existingLog = panel.querySelector(".upgrade-log");
+  const logText = log === null && existingLog ? existingLog.textContent : (log || "");
+  const wasOpen = panel.querySelector("details")?.open;
+  panel.innerHTML = `
+    <div class="upgrade-panel">
+      <h3>${escapeHtml(label)} upgrade</h3>
+      <div class="notice ${tone}">${escapeHtml(status.message || status.state.replace(/_/g, " "))}</div>
+      ${list(status.warnings, "warn")}
+      ${list(status.notes, "")}
+      ${logText ? `<details${wasOpen ? " open" : ""}><summary>Log</summary><pre class="upgrade-log">${escapeHtml(logText)}</pre></details>` : ""}
+    </div>`;
+  const pre = panel.querySelector(".upgrade-log");
+  if (pre) pre.scrollTop = pre.scrollHeight;
+}
+
+async function resumeUpgradeStatus() {
+  if (state.upgradeResumeChecked) return;
+  state.upgradeResumeChecked = true;
+  const access = state.snapshot?.access || {};
+  if (!access.upgrade_allowed || !access.upgrade_helper_installed) return;
+  for (const [target] of UPDATE_REPOS) {
+    try {
+      const response = await fetch(`/api/upgrade/${encodeURIComponent(target)}`, { cache: "no-store" });
+      const payload = await response.json();
+      const status = payload.status;
+      if (!status) continue;
+      const recent = status.finished_at && Date.now() / 1000 - status.finished_at < 600;
+      if (status.state === "running" || recent) {
+        state.upgrade = { target, requestedAt: null, done: status.state !== "running" };
+        renderUpgradeProgress(status, payload.log || "");
+        if (status.state === "running") pollUpgrade();
+        return;
+      }
+    } catch (error) {
+      return;
+    }
+  }
 }
 
 async function checkForUpdates() {
@@ -536,10 +678,8 @@ function renderOperatorNotes(snap) {
   serviceStates.forEach(([name, value]) => {
     notes.push(`${name} is ${value.state.replace("_", " ").toLowerCase()}.`);
   });
-  ["console", "dragonsync"].forEach((key) => {
-    const info = snap.updates?.[key];
-    if (info?.update_available) {
-      const label = key === "console" ? "Console" : "DragonSync";
+  UPDATE_REPOS.forEach(([key, label]) => {
+    if (snap.updates?.[key]?.update_available) {
       notes.push(`${label} update available — see Version tab.`);
     }
   });

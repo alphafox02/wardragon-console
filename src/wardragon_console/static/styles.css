@@ -273,6 +273,10 @@ th {
   color: var(--green);
 }
 
+.notice.warn {
+  color: var(--amber);
+}
+
 .config-toolbar {
   display: flex;
   justify-content: space-between;
@@ -421,6 +425,43 @@ select:disabled {
 
 .update-checked {
   margin-top: 8px;
+}
+
+.update-row .config-header {
+  margin-bottom: 0;
+}
+
+.upgrade-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.upgrade-panel h3 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.upgrade-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.upgrade-list.warn {
+  color: var(--amber);
+}
+
+.upgrade-log {
+  max-height: 240px;
+  overflow: auto;
+  margin: 6px 0 0;
+  padding: 8px;
+  background: #f1f3ef;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @media (max-width: 900px) {

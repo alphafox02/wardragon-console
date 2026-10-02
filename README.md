@@ -35,9 +35,9 @@ Operator actions:
 
 - Restart `dragonsync.service` from the UI (via a narrow sudoers rule).
 - Upload TAK PKCS#12 / PEM / key / CA files. Stored under `<DragonSync>/certs/` mode 0700 and written into `config.ini` as absolute paths.
-- Check for newer versions of WarDragon Console and DragonSync against the upstream GitHub repos (read-only — does not pull or apply).
+- Check for newer versions of WarDragon Console, droneid-go and DragonSync against the upstream GitHub repos, and optionally upgrade a stock install in place (see [Updating](#updating)).
 
-The console does **not** subscribe to high-rate drone/signal ZMQ ports and does not query systemd for service state. It also never auto-updates code: surfacing "an update is available" is as far as it goes.
+The console does **not** subscribe to high-rate drone/signal ZMQ ports and does not query systemd for service state. It never updates code on its own; an upgrade only runs when the operator presses the button.
 
 ## Install on a kit
 
@@ -60,7 +60,8 @@ What it does:
 - Copies source to `/opt/wardragon-console` and creates a `/usr/local/bin/wardragon-console` wrapper.
 - Installs `wardragon-console.service` (templated to the chosen user and DragonSync / DragonScope paths). Runs as that user, not root.
 - Installs the tether-alias helper at `/usr/local/bin/wardragon-tether-alias` for the stable-URL feature (see below).
-- Installs `/etc/sudoers.d/wardragon-console` with **two** narrow rules: the service account may run `systemctl restart dragonsync.service` and `wardragon-tether-alias add|del`, and nothing else.
+- Installs the upgrade helper at `/usr/local/bin/wardragon-upgrade` (see [Updating](#updating)).
+- Installs `/etc/sudoers.d/wardragon-console` with narrow rules: the service account may run `systemctl restart dragonsync.service`, `wardragon-tether-alias add|del`, and `wardragon-upgrade start <console|droneid|dragonsync>`, and nothing else.
 - Publishes `wardragon.local` on the LAN via Avahi (`packaging/avahi/wardragon-console.service`) and a small CNAME publisher unit (`wardragon-avahi-alias.service`) that adds the alias over the Avahi D-Bus API — no `/etc/hostname` change.
 - Pins `wardragon.local` to `127.0.0.1` in `/etc/hosts` on the kit only, so the kit's own browser always reaches loopback. Remote clients ignore this entry.
 - Sets `deny-interfaces=` in `/etc/avahi/avahi-daemon.conf` to the kit's current docker bridges and veth pairs, so Avahi only announces on real interfaces. Re-run `install.sh` if you create new docker networks later.
@@ -156,7 +157,29 @@ git pull
 sudo packaging/install.sh
 ```
 
-Each run apt-installs anything new, rsyncs source to `/opt/wardragon-console/src/` with `--delete`, re-templates the systemd unit and sudoers, and restarts `wardragon-console.service`. The **Check for updates** button on the Version tab tells you when there is something to pull (read-only — no auto-apply).
+Each run apt-installs anything new, rsyncs source to `/opt/wardragon-console/src/` with `--delete`, re-templates the systemd unit and sudoers, and restarts `wardragon-console.service`.
+
+### Upgrading from the Version tab
+
+**Check for updates** compares the kit's WarDragon Console, droneid-go and DragonSync checkouts with GitHub. When one is behind, an **Upgrade** button appears next to it. This is meant for stock kits: the `dragon` user, with the repos where the WarDragon image ships them under `/home/dragon/WarDragon`.
+
+| Repo | What the upgrade does |
+|------|-----------------------|
+| WarDragon Console | `git pull`, then `packaging/install.sh`. The console restarts and the page reconnects. |
+| droneid-go | `git pull`, then the repo's `install.sh`, which installs the matching prebuilt binary and restarts `zmq-decoder`. |
+| DragonSync | `git pull`, keeping your `config.ini` and `gps.ini` settings, then restarts `dragonsync` (and `wardragon-monitor` / `drone-logger` if they are running). |
+
+DragonSync settings are carried over key by key: anything you changed from the shipped defaults is kept, new options from upstream are added, and a timestamped backup (`config.ini.bak.<time>`) is left next to the file. If a setting you changed was also changed upstream, your value is kept and the Version tab lists it. If `requirements.txt` changed, the upgrade tells you to run `pip install -r requirements.txt` rather than installing packages itself.
+
+The upgrade does nothing and asks you to upgrade manually when the kit is not a stock install, for example:
+
+- the repo has local commits, is on a branch other than `main`, or points at a fork
+- tracked files have local edits (other than DragonSync's `config.ini` / `gps.ini`)
+- the installed `wardragon-console.service` or `zmq-decoder.service` has been edited. Put local console settings in a drop-in (`sudo systemctl edit wardragon-console`) so they survive upgrades.
+
+Progress and the full log are shown on the Version tab and kept in `/var/lib/wardragon-upgrade/`. There is no automatic rollback; if an install step fails, the log shows the previous commit, and re-running the manual steps above recovers.
+
+The button appears after `install.sh` from a version that includes it has been run once. Set `WARDRAGON_CONSOLE_UPGRADE=0` to turn it off.
 
 ## Configuration model
 
@@ -177,6 +200,8 @@ WARDRAGON_CONSOLE_TETHER_CLAIM_PROFILES=10.152.47.0/24=10.152.47.250
 WARDRAGON_CONSOLE_UPDATE_CHECK=1
 WARDRAGON_CONSOLE_UPSTREAM_REPO=alphafox02/wardragon-console
 WARDRAGON_DRAGONSYNC_UPSTREAM_REPO=alphafox02/DragonSync
+WARDRAGON_DRONEID_UPSTREAM_REPO=alphafox02/droneid-go
+WARDRAGON_CONSOLE_UPGRADE=1
 WARDRAGON_HAS_DRAGONSIG=auto
 ```
 
@@ -245,7 +270,7 @@ The Overview tab also shows the **stable URL** prominently in operator notes whe
 
 ### Trust model
 
-Physical access to the kit = full trust. The packaged service enables remote config writes **and** remote DragonSync restart from any tether listener; the assumption is that the operator has physical control of the USB tether path. To lock down further: unplug the internal USB cable to the tether port (which is a kit-board-level option), pad-lock the enclosure, or set `WARDRAGON_CONSOLE_REMOTE_CONFIG_WRITE=0` / `WARDRAGON_CONSOLE_REMOTE_RESTART=0` to require an SSH tunnel for those operations. Cross-origin POST/PUT is rejected by the request handler regardless of bind. Password/token fields are masked on non-loopback listeners; saving the masked placeholder preserves the existing secret, typing a new value replaces it, clearing the field clears it.
+Physical access to the kit = full trust. The packaged service enables remote config writes, remote DragonSync restart **and** in-place upgrades from any tether listener; the assumption is that the operator has physical control of the USB tether path. To lock down further: unplug the internal USB cable to the tether port (which is a kit-board-level option), pad-lock the enclosure, or set `WARDRAGON_CONSOLE_REMOTE_CONFIG_WRITE=0` / `WARDRAGON_CONSOLE_REMOTE_RESTART=0` to require an SSH tunnel for those operations (upgrades follow the restart setting). Cross-origin POST/PUT is rejected by the request handler regardless of bind. Password/token fields are masked on non-loopback listeners; saving the masked placeholder preserves the existing secret, typing a new value replaces it, clearing the field clears it.
 
 ## Headless Access Strategy
 

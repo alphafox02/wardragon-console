@@ -73,6 +73,26 @@ class ServerSecurityTests(unittest.TestCase):
         )
         self.assertEqual(status, 403)
 
+    def test_upgrade_post_rejects_cross_origin(self) -> None:
+        status, _ = _request(
+            "POST",
+            self.harness.url("/api/upgrade/dragonsync"),
+            body=b"",
+            headers={"Origin": "http://evil.example"},
+        )
+        self.assertEqual(status, 403)
+
+    def test_upgrade_unknown_target_is_not_found(self) -> None:
+        status, _ = _request("GET", self.harness.url("/api/upgrade/..%2f..%2fetc"))
+        self.assertEqual(status, 404)
+        status, _ = _request(
+            "POST",
+            self.harness.url("/api/upgrade/bogus"),
+            body=b"",
+            headers={"Origin": f"http://127.0.0.1:{self.harness.port}"},
+        )
+        self.assertEqual(status, 404)
+
     def test_put_accepts_matching_origin(self) -> None:
         body = json.dumps({"mqtt_enabled": False}).encode("utf-8")
         status, _ = _request(

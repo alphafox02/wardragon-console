@@ -1,0 +1,359 @@
+#!/usr/bin/env bash
+# In-place upgrade of a stock WarDragon repo.
+#
+#   wardragon-upgrade start <console|droneid|dragonsync>
+#
+# Runs in a transient systemd unit; status and log are written to
+# /var/lib/wardragon-upgrade/. Installs that differ from the stock layout
+# are left untouched and should be upgraded manually.
+set -Euo pipefail
+
+UNIT=wardragon-upgrade
+SELF=/usr/local/bin/wardragon-upgrade
+STATE_DIR=/var/lib/wardragon-upgrade
+OWNER=dragon
+OWNER_HOME=/home/dragon
+REPO_ROOT=/home/dragon/WarDragon
+CONSOLE_SRC=/opt/wardragon-console/src
+
+repo_dir() {
+  case "$1" in
+    console)    echo "$REPO_ROOT/wardragon-console" ;;
+    droneid)    echo "$REPO_ROOT/droneid-go" ;;
+    dragonsync) echo "$REPO_ROOT/DragonSync" ;;
+    *) return 1 ;;
+  esac
+}
+
+repo_slug() {
+  case "$1" in
+    console)    echo "alphafox02/wardragon-console" ;;
+    droneid)    echo "alphafox02/droneid-go" ;;
+    dragonsync) echo "alphafox02/DragonSync" ;;
+    *) return 1 ;;
+  esac
+}
+
+TARGET=""
+REPO=""
+STATUS=""
+LOG=""
+NOTES=""
+BEFORE=""
+AFTER=""
+STARTED=""
+STEP=""
+WORK=""
+PENDING_RESTORE=()
+
+write_status() {
+  # write_status <state> <step> [message]
+  python3 - "$STATUS" "$TARGET" "$1" "$2" "${3:-}" "$BEFORE" "$AFTER" "$STARTED" "$NOTES" <<'PY'
+import json, os, sys, tempfile, time
+path, target, state, step, message, before, after, started, notes_path = sys.argv[1:10]
+warnings, notes = [], []
+try:
+    with open(notes_path, encoding="utf-8") as handle:
+        for line in handle:
+            kind, _, text = line.rstrip("\n").partition("\t")
+            (warnings if kind == "warn" else notes).append(text)
+except OSError:
+    pass
+terminal = state in {"completed", "completed_with_warnings", "failed", "refused", "up_to_date"}
+payload = {
+    "target": target,
+    "state": state,
+    "step": step,
+    "message": message,
+    "before": before or None,
+    "after": after or None,
+    "started_at": float(started) if started else None,
+    "finished_at": time.time() if terminal else None,
+    "warnings": warnings,
+    "notes": notes,
+}
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".status.")
+with os.fdopen(fd, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle)
+os.chmod(tmp, 0o644)
+os.replace(tmp, path)
+PY
+}
+
+log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
+note() { printf 'note\t%s\n' "$*" >>"$NOTES"; log "note: $*"; }
+warn() { printf 'warn\t%s\n' "$*" >>"$NOTES"; log "WARNING: $*"; }
+
+cleanup() {
+  local f
+  for f in "${PENDING_RESTORE[@]:-}"; do
+    [[ -z "$f" ]] && continue
+    if put_config "$WORK/$f.local" "$f"; then
+      log "restored your $f"
+    else
+      log "could not restore $f; your copy is at $f.bak.*"
+    fi
+  done
+  PENDING_RESTORE=()
+  [[ -n "$WORK" ]] && as_owner rm -rf "$WORK"
+  WORK=""
+}
+
+finish() {
+  # finish <state> <message>
+  trap - ERR
+  cleanup
+  write_status "$1" done "$2"
+  log "$1: $2"
+  exit 0
+}
+
+fail() {
+  trap - ERR
+  cleanup
+  write_status failed "$STEP" "$1"
+  log "FAILED: $1"
+  exit 1
+}
+
+refuse() { finish refused "$1"; }
+
+restored() {
+  local keep=() x
+  for x in "${PENDING_RESTORE[@]:-}"; do
+    [[ -n "$x" && "$x" != "$1" ]] && keep+=("$x")
+  done
+  PENDING_RESTORE=("${keep[@]:-}")
+}
+
+step() { STEP="$1"; write_status running "$1" "${2:-}"; log "== $1"; }
+
+as_owner() { runuser -u "$OWNER" -- env HOME="$OWNER_HOME" GIT_TERMINAL_PROMPT=0 "$@"; }
+g() { as_owner git -C "$REPO" "$@"; }
+
+# put_config <source> <name>: write into the repo keeping the operator's file mode.
+put_config() {
+  as_owner cp "$1" "$REPO/$2" && as_owner chmod --reference="$WORK/$2.local" "$REPO/$2"
+}
+
+# True if <installed unit> matches some committed version of <repo path>.
+unit_is_stock() {
+  local installed="$1" rel="$2" want rev
+  [[ -f "$installed" && ! -L "$installed" ]] || return 1
+  want=$(normalize_unit <"$installed")
+  while read -r rev; do
+    [[ "$(g show "$rev:$rel" 2>/dev/null | normalize_unit || true)" == "$want" ]] && return 0
+  done < <(g log --format=%H -- "$rel" || true)
+  return 1
+}
+
+normalize_unit() {
+  sed -E 's#/home/dragon/WarDragon/(antsdr|dragonsdr)_dji_droneid#@DRAGONSCOPE@#g'
+}
+
+cmd_start() {
+  local target="$1"
+  repo_dir "$target" >/dev/null || { echo "unknown target: $target" >&2; exit 2; }
+  install -d -o root -g root -m 0755 "$STATE_DIR"
+  if systemctl is-active --quiet "$UNIT.service"; then
+    echo "another upgrade is already running" >&2
+    exit 3
+  fi
+  if ! systemd-run --unit="$UNIT" --collect --quiet \
+      --description="WarDragon in-place upgrade ($target)" \
+      --property=RuntimeMaxSec=1800 \
+      "$SELF" run "$target"; then
+    echo "could not launch upgrade unit" >&2
+    exit 4
+  fi
+  echo "started $target"
+}
+
+cmd_run() {
+  TARGET="$1"
+  REPO=$(repo_dir "$TARGET") || exit 2
+  local slug
+  slug=$(repo_slug "$TARGET")
+  [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
+  install -d -o root -g root -m 0755 "$STATE_DIR"
+  STATUS="$STATE_DIR/$TARGET.json"
+  LOG="$STATE_DIR/$TARGET.log"
+  NOTES="$STATE_DIR/.$TARGET.notes"
+  STARTED=$(date +%s)
+  : >"$NOTES"
+  : >"$LOG"
+  chmod 0644 "$LOG"
+  exec >>"$LOG" 2>&1
+  trap '[[ $BASHPID == "$$" ]] && fail "unexpected error (line $LINENO)"; exit 1' ERR
+
+  step preflight "checking $REPO"
+  id "$OWNER" >/dev/null 2>&1 || refuse "user '$OWNER' does not exist; upgrade manually"
+  [[ -d "$REPO/.git" && ! -L "$REPO" && ! -L "$REPO/.git" ]] \
+    || refuse "$REPO is not a stock git checkout; upgrade manually"
+  [[ "$(stat -c %U "$REPO/.git")" == "$OWNER" ]] || refuse "$REPO is not owned by $OWNER; upgrade manually"
+
+  local branch origin
+  branch=$(g symbolic-ref --short -q HEAD || true)
+  [[ "$branch" == "main" ]] || refuse "$REPO is on '${branch:-detached HEAD}', not main; upgrade manually"
+  origin=$(g remote get-url origin || true)
+  case "$origin" in
+    "https://github.com/$slug" | "https://github.com/$slug.git" | \
+    "git@github.com:$slug" | "git@github.com:$slug.git") ;;
+    *) refuse "origin is '$origin', expected github.com/$slug; upgrade manually" ;;
+  esac
+
+  case "$TARGET" in
+    console)
+      unit_is_stock /etc/systemd/system/wardragon-console.service packaging/wardragon-console.service \
+        || refuse "wardragon-console.service has been customized; upgrade manually (use 'systemctl edit' drop-ins for local settings)"
+      ;;
+    droneid)
+      unit_is_stock /etc/systemd/system/zmq-decoder.service zmq-decoder.service \
+        || refuse "zmq-decoder.service is customized or in legacy mode; upgrade manually"
+      ;;
+  esac
+
+  BEFORE=$(g rev-parse HEAD)
+  step fetch "checking GitHub for updates"
+  timeout 300 runuser -u "$OWNER" -- env HOME="$OWNER_HOME" GIT_TERMINAL_PROMPT=0 \
+    git -C "$REPO" fetch --quiet origin main \
+    || fail "could not reach GitHub (is the kit online?)"
+
+  local ahead behind
+  ahead=$(g rev-list --count origin/main..HEAD)
+  behind=$(g rev-list --count HEAD..origin/main)
+  [[ "$ahead" == "0" ]] || refuse "$ahead local commit(s) not on GitHub; upgrade manually"
+  if [[ "$behind" == "0" ]]; then
+    AFTER="$BEFORE"
+    finish up_to_date "already at the latest version"
+  fi
+  log "$behind new commit(s) available"
+
+  local allowed=() configs=() path line
+  [[ "$TARGET" == "dragonsync" ]] && allowed=(config.ini gps.ini)
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    path="${line:3}"
+    if [[ " ${allowed[*]:-} " == *" $path "* ]]; then
+      [[ -f "$REPO/$path" && ! -L "$REPO/$path" ]] || refuse "$path is missing or not a regular file; upgrade manually"
+      configs+=("$path")
+    else
+      refuse "local changes to '$path'; upgrade manually"
+    fi
+  done < <(g status --porcelain --untracked-files=no --ignore-submodules=all)
+
+  WORK=$(as_owner mktemp -d /tmp/wardragon-upgrade.XXXXXX)
+  local ts f
+  ts=$(date +%Y%m%d%H%M%S)
+  for f in "${configs[@]:-}"; do
+    [[ -z "$f" ]] && continue
+    step "save $f" "backing up your $f"
+    as_owner cp -p "$REPO/$f" "$REPO/$f.bak.$ts"
+    as_owner cp -p "$REPO/$f" "$WORK/$f.local"
+    g show "HEAD:$f" | as_owner tee "$WORK/$f.base" >/dev/null
+    note "backed up $f to $f.bak.$ts"
+  done
+  for f in "${configs[@]:-}"; do
+    [[ -z "$f" ]] && continue
+    PENDING_RESTORE+=("$f")
+    g checkout HEAD -- "$f"
+  done
+
+  step pull "updating ${BEFORE:0:7} to latest"
+  g merge --ff-only --quiet origin/main || fail "update could not be applied; nothing changed"
+  AFTER=$(g rev-parse HEAD)
+  local changed
+  changed=$(g diff --name-only "$BEFORE" "$AFTER")
+
+  case "$TARGET" in
+    console)    upgrade_console ;;
+    droneid)    upgrade_droneid ;;
+    dragonsync) upgrade_dragonsync "${configs[@]:-}" ;;
+  esac
+
+  if grep -q '^warn' "$NOTES"; then
+    finish completed_with_warnings "upgraded to ${AFTER:0:7} with warnings"
+  fi
+  finish completed "upgraded to ${AFTER:0:7}"
+}
+
+verify_clean_head() {
+  [[ "$(g rev-parse HEAD)" == "$AFTER" ]] || fail "repository changed during upgrade"
+  [[ -z "$(g status --porcelain --untracked-files=no --ignore-submodules=all)" ]] \
+    || fail "repository changed during upgrade"
+}
+
+upgrade_console() {
+  verify_clean_head
+  step install "running install.sh (the console will restart)"
+  WARDRAGON_USER="$OWNER" bash "$REPO/packaging/install.sh" </dev/null \
+    || fail "install.sh failed; repo is at ${AFTER:0:7}, previous version was ${BEFORE:0:7}"
+}
+
+upgrade_droneid() {
+  verify_clean_head
+  step install "running install.sh"
+  (cd "$REPO" && bash ./install.sh </dev/null) \
+    || fail "install.sh failed; repo is at ${AFTER:0:7}, previous version was ${BEFORE:0:7}"
+}
+
+upgrade_dragonsync() {
+  local f report
+  for f in "$@"; do
+    [[ -z "$f" ]] && continue
+    step "merge $f" "restoring your settings in $f"
+    if report=$(as_owner env PYTHONPATH="$CONSOLE_SRC" python3 -m wardragon_console.ini_reconcile \
+        "$WORK/$f.base" "$WORK/$f.local" "$REPO/$f" "$WORK/$f.merged"); then
+      put_config "$WORK/$f.merged" "$f"
+      restored "$f"
+      local kind text
+      while IFS=$'\t' read -r kind text; do
+        if [[ "$kind" == "warn" ]]; then warn "$text"; else note "$text"; fi
+      done < <(python3 - "$report" "$f" <<'PY' || true
+import json, sys
+data = json.loads(sys.argv[1])
+name = sys.argv[2]
+print("note\t%s: kept %d of your setting(s)" % (name, len(data.get("preserved", []))))
+for section, key in data.get("conflicts", []):
+    print("warn\t%s: [%s] %s changed upstream too; kept your value" % (name, section, key))
+PY
+)
+    else
+      put_config "$WORK/$f.local" "$f"
+      restored "$f"
+      warn "could not merge $f automatically; your previous $f was kept as-is. Compare with the new version using 'git diff $f'"
+    fi
+  done
+
+  if grep -qx "requirements.txt" <<<"$changed"; then
+    warn "requirements.txt changed; new Python packages may be needed: cd $REPO && pip install -r requirements.txt"
+  fi
+  if [[ -f "$REPO/.gitmodules" ]] && grep -qx "faa-rid-lookup" <<<"$changed"; then
+    step submodule "updating faa-rid-lookup"
+    timeout 300 runuser -u "$OWNER" -- env HOME="$OWNER_HOME" GIT_TERMINAL_PROMPT=0 \
+      git -C "$REPO" submodule update --init faa-rid-lookup \
+      || warn "faa-rid-lookup update failed; run 'git submodule update --init' in $REPO"
+  fi
+
+  local unit
+  for unit in dragonsync wardragon-monitor drone-logger; do
+    if systemctl is-active --quiet "$unit.service"; then
+      step restart "restarting $unit"
+      systemctl restart "$unit.service" || true
+      sleep 5
+      systemctl is-active --quiet "$unit.service" \
+        || warn "$unit did not come back up; check: journalctl -u $unit -n 50"
+    fi
+  done
+}
+
+main() {
+  case "${1:-}" in
+    start) [[ $# -eq 2 ]] || { echo "usage: $0 start <console|droneid|dragonsync>" >&2; exit 2; }; cmd_start "$2" ;;
+    run)   [[ $# -eq 2 ]] || exit 2; cmd_run "$2" ;;
+    *)     echo "usage: $0 start <console|droneid|dragonsync>" >&2; exit 2 ;;
+  esac
+}
+
+# Keep as the last line: the console upgrade may replace this file while it runs.
+main "$@"; exit $?

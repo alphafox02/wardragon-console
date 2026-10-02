@@ -7,6 +7,8 @@ from pathlib import Path
 
 DEFAULT_DRAGONSYNC_DIR = Path("/home/dragon/WarDragon/DragonSync")
 DEFAULT_DRAGONSCOPE_DIR = Path("/home/dragon/WarDragon/dragonsdr_dji_droneid")
+DEFAULT_CONSOLE_REPO_DIR = Path("/home/dragon/WarDragon/wardragon-console")
+DEFAULT_DRONEID_DIR = Path("/home/dragon/WarDragon/droneid-go")
 
 
 @dataclass(frozen=True)
@@ -16,6 +18,8 @@ class Settings:
     dragonsync_url: str = "http://127.0.0.1:8088"
     dragonsync_dir: Path = DEFAULT_DRAGONSYNC_DIR
     dragonscope_dir: Path = DEFAULT_DRAGONSCOPE_DIR
+    console_repo_dir: Path = DEFAULT_CONSOLE_REPO_DIR
+    droneid_dir: Path = DEFAULT_DRONEID_DIR
     monitor_endpoint: str = "tcp://127.0.0.1:4225"
     droneid_health_endpoint: str = "tcp://127.0.0.1:4227"
     dragonsig_health_endpoint: str = "tcp://127.0.0.1:4228"
@@ -43,7 +47,9 @@ class Settings:
     update_check_enabled: bool = True
     console_upstream_repo: str = "alphafox02/wardragon-console"
     dragonsync_upstream_repo: str = "alphafox02/DragonSync"
+    droneid_upstream_repo: str = "alphafox02/droneid-go"
     dragonscope_license_check_enabled: bool = True
+    upgrade_enabled: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -55,6 +61,8 @@ class Settings:
             dragonsync_url=os.environ.get("WARDRAGON_DRAGONSYNC_URL", "http://127.0.0.1:8088").rstrip("/"),
             dragonsync_dir=dragonsync_dir,
             dragonscope_dir=dragonscope_dir,
+            console_repo_dir=Path(os.environ.get("WARDRAGON_CONSOLE_REPO_DIR", str(DEFAULT_CONSOLE_REPO_DIR))),
+            droneid_dir=Path(os.environ.get("WARDRAGON_DRONEID_DIR", str(DEFAULT_DRONEID_DIR))),
             monitor_endpoint=os.environ.get("WARDRAGON_MONITOR_ZMQ", "tcp://127.0.0.1:4225"),
             droneid_health_endpoint=os.environ.get("WARDRAGON_DRONEID_HEALTH_ZMQ", "tcp://127.0.0.1:4227"),
             dragonsig_health_endpoint=os.environ.get("WARDRAGON_DRAGONSIG_HEALTH_ZMQ", "tcp://127.0.0.1:4228"),
@@ -79,7 +87,9 @@ class Settings:
             update_check_enabled=_env_bool("WARDRAGON_CONSOLE_UPDATE_CHECK", True),
             console_upstream_repo=os.environ.get("WARDRAGON_CONSOLE_UPSTREAM_REPO", "alphafox02/wardragon-console"),
             dragonsync_upstream_repo=os.environ.get("WARDRAGON_DRAGONSYNC_UPSTREAM_REPO", "alphafox02/DragonSync"),
+            droneid_upstream_repo=os.environ.get("WARDRAGON_DRONEID_UPSTREAM_REPO", "alphafox02/droneid-go"),
             dragonscope_license_check_enabled=_env_bool("WARDRAGON_DRAGONSCOPE_LICENSE_CHECK", True),
+            upgrade_enabled=_env_bool("WARDRAGON_CONSOLE_UPGRADE", True),
         )
 
     def can_write_config(self) -> bool:
@@ -91,6 +101,13 @@ class Settings:
 
     def can_restart_dragonsync(self) -> bool:
         if not self.restart_enabled:
+            return False
+        if self.is_local_bind():
+            return True
+        return self.allow_remote_restart
+
+    def can_upgrade(self) -> bool:
+        if not self.upgrade_enabled:
             return False
         if self.is_local_bind():
             return True

@@ -170,3 +170,34 @@ def _format(key: str, value: str, sep: str) -> list[str]:
     lines = [f"{key}{joiner}{first}".rstrip()]
     lines.extend(f"    {part}" for part in rest)
     return lines
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(description="Carry INI settings across an upstream update.")
+    parser.add_argument("base")
+    parser.add_argument("local")
+    parser.add_argument("new")
+    parser.add_argument("output")
+    args = parser.parse_args(argv)
+
+    def read(path: str) -> str:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    try:
+        result = reconcile(read(args.base), read(args.local), read(args.new))
+    except (OSError, UnicodeDecodeError, ReconcileError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    with open(args.output, "w", encoding="utf-8") as handle:
+        handle.write(result.text)
+    json.dump({"preserved": result.preserved, "conflicts": result.conflicts}, sys.stdout)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
