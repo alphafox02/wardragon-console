@@ -222,7 +222,9 @@ cmd_run() {
   local ahead behind
   ahead=$(g rev-list --count origin/main..HEAD)
   behind=$(g rev-list --count HEAD..origin/main)
-  [[ "$ahead" == "0" ]] || refuse "$ahead local commit(s) not on GitHub; upgrade manually"
+  # droneid is a stock checkout synced to origin/main below, so "local commits
+  # ahead" (which also results from an upstream history change) must not block it.
+  [[ "$ahead" == "0" || "$TARGET" == "droneid" ]] || refuse "$ahead local commit(s) not on GitHub; upgrade manually"
   if [[ "$behind" == "0" ]]; then
     AFTER="$BEFORE"
     finish up_to_date "already at the latest version"
@@ -260,7 +262,13 @@ cmd_run() {
   done
 
   step pull "updating ${BEFORE:0:7} to latest"
-  g merge --ff-only --quiet origin/main || fail "update could not be applied; nothing changed"
+  if [[ "$TARGET" == "droneid" ]]; then
+    # Sync the droneid checkout to exactly origin/main. Unlike ff-only merge this
+    # is not blocked by incidental local drift or an upstream history change.
+    g reset --hard --quiet origin/main || fail "update could not be applied; nothing changed"
+  else
+    g merge --ff-only --quiet origin/main || fail "update could not be applied; nothing changed"
+  fi
   AFTER=$(g rev-parse HEAD)
   local changed
   changed=$(g diff --name-only "$BEFORE" "$AFTER")
