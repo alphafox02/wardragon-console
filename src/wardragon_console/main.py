@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import signal
 from dataclasses import replace
 
 from .collectors import CollectorGroup
@@ -9,6 +10,9 @@ from .server import ConsoleServer
 from .settings import Settings
 from .state import SnapshotStore
 from .tether import TetherAccessManager
+from .history import HistoryStore
+from .offline_maps import OfflineMaps
+from .tracks import TrackBuffer
 
 
 def main() -> None:
@@ -33,12 +37,20 @@ def main() -> None:
         settings = replace(settings, **overrides)
 
     store = SnapshotStore()
-    collectors = CollectorGroup(settings, store)
+    tracks = TrackBuffer()
+    history = HistoryStore(settings.data_dir, settings.history_max_bytes)
+    collectors = CollectorGroup(settings, store, tracks, history)
     collectors.start()
     tether = TetherAccessManager(settings, store)
     tether.start()
 
-    server = ConsoleServer(settings, store, tether.status)
+    offline_maps = OfflineMaps(settings.data_dir, settings.map_upload_max_bytes)
+    server = ConsoleServer(settings, store, tether.status, tracks, history, offline_maps)
+
+    def _terminate(signum, frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _terminate)
     logging.getLogger(__name__).info("WarDragon Console listening on http://%s:%s/", settings.bind_host, settings.bind_port)
     try:
         server.serve_forever()
@@ -47,6 +59,7 @@ def main() -> None:
     finally:
         tether.stop()
         collectors.stop()
+        history.flush()
         server.server_close()
 
 

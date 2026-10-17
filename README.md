@@ -181,6 +181,16 @@ Progress and the full log are shown on the Version tab and kept in `/var/lib/war
 
 The button appears after `install.sh` from a version that includes it has been run once. Set `WARDRAGON_CONSOLE_UPGRADE=0` to turn it off.
 
+## Map tab
+
+The **Map** tab shows what DragonSync reports, the same things it sends to TAK: drones with their flight paths, pilot and home points, ADS-B aircraft (if DragonSync is fed ADS-B), DragonSig signals (Elite) and the kit itself with range rings. Each layer and each track can be turned on and off.
+
+- **Background map:** OpenStreetMap when the viewing device has internet; otherwise a plain grid with range rings, so the map still works offline. The tile source can be changed with `WARDRAGON_CONSOLE_MAP_TILE_URL` (an `{z}/{x}/{y}` URL). Online tiles tell the tile provider roughly which area is being viewed.
+- **Live:** the last 30 minutes of each track are kept in memory from the data the console already polls. Nothing is written to disk.
+- **History (off by default):** switch to **History** and open **History settings** to keep flights on the kit for 1, 7 or 30 days (500 MB cap, oldest removed first). Aircraft are only kept if you tick *Include aircraft*. History includes pilot locations when drones broadcast them. It is stored in `/var/lib/wardragon-console/`, and **Clear history** deletes it. Changing these settings needs the same permission as editing config.
+- **Offline maps (optional):** under **Offline maps**, upload a raster `.mbtiles` file (PNG/JPEG/WebP tiles, up to 2 GB, at most 5 files) or copy one into `/var/lib/wardragon-console/maps/` over SSH. When online tiles do not load, the map uses it automatically; a **Map** selector appears once one is installed. Files are checked before they are accepted, read-only afterwards, and an upload is refused if it would leave less than 1 GB free. Vector maps are not supported. QGIS can export an `.mbtiles` for an area from any map you are licensed to use; bulk-downloading OpenStreetMap's own tile servers is not allowed by their usage policy.
+- **Export:** CSV (spreadsheets) or KML (Google Earth, ATAK) for every flight in the chosen time range, or just the selected flight. KML tracks are time-stamped, so Google Earth's time slider replays them.
+
 ## Configuration model
 
 Useful environment overrides (set in `packaging/wardragon-console.service` for the packaged install):
@@ -202,6 +212,11 @@ WARDRAGON_CONSOLE_UPSTREAM_REPO=alphafox02/wardragon-console
 WARDRAGON_DRAGONSYNC_UPSTREAM_REPO=alphafox02/DragonSync
 WARDRAGON_DRONEID_UPSTREAM_REPO=alphafox02/droneid-go
 WARDRAGON_CONSOLE_UPGRADE=1
+WARDRAGON_CONSOLE_MAP=1
+WARDRAGON_CONSOLE_MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
+WARDRAGON_CONSOLE_DATA_DIR=/var/lib/wardragon-console
+WARDRAGON_CONSOLE_HISTORY_MAX_MB=500
+WARDRAGON_CONSOLE_MAP_UPLOAD_MAX_MB=2048
 WARDRAGON_HAS_DRAGONSIG=auto
 ```
 

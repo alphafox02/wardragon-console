@@ -26,6 +26,7 @@
     <button class="tab" data-tab="receivers">Receivers</button>
     <button class="tab" data-tab="drones">Drones</button>
     <button class="tab" data-tab="signals" id="tab-signals">Signals</button>
+    <button class="tab" data-tab="map" id="tab-map" hidden>Map</button>
     <button class="tab" data-tab="config">Config</button>
     <button class="tab" data-tab="dragonscope">DragonScope</button>
     <button class="tab" data-tab="about">Version</button>
@@ -199,6 +200,51 @@
       </article>
       <article class="card license-card" id="dragonscope-license-card" hidden>
         <div id="dragonscope-license-content"></div>
+      </article>
+    </section>
+
+    <section class="panel" id="map">
+      <article class="card map-card">
+        <div class="map-toolbar">
+          <div class="segmented" id="map-mode">
+            <button type="button" class="active" data-mode="live">Live</button>
+            <button type="button" data-mode="history">History</button>
+          </div>
+          <div class="map-history-controls" id="map-history-controls" hidden>
+            <select id="map-range" aria-label="Time range">
+              <option value="3600">Last hour</option>
+              <option value="86400">Last 24 hours</option>
+              <option value="604800">Last 7 days</option>
+              <option value="2592000">Last 30 days</option>
+            </select>
+            <button class="secondary" type="button" id="map-export-csv">Export CSV</button>
+            <button class="secondary" type="button" id="map-export-kml">Export KML</button>
+          </div>
+          <span id="map-note" class="subtle map-note"></span>
+          <span id="map-status" class="pill">Map</span>
+        </div>
+        <div class="map-layout">
+          <div id="map-canvas" class="map-canvas"></div>
+          <aside class="map-side">
+            <section class="map-section">
+              <h3>Show</h3>
+              <label class="map-field" id="map-base-field" hidden><span>Map</span><select id="map-base"></select></label>
+              <div id="map-layers" class="map-layer-grid"></div>
+            </section>
+            <section class="map-section">
+              <h3 id="map-list-title">Live tracks</h3>
+              <div id="map-tracks" class="map-list"><div class="subtle">Waiting for data…</div></div>
+            </section>
+            <details class="map-section map-settings" id="map-history-settings" hidden>
+              <summary>History settings</summary>
+              <div id="map-history-form"></div>
+            </details>
+            <details class="map-section map-settings" id="map-offline">
+              <summary>Offline maps</summary>
+              <div id="map-offline-body"></div>
+            </details>
+          </aside>
+        </div>
       </article>
     </section>
 

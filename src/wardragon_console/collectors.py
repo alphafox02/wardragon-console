@@ -10,14 +10,24 @@ from urllib.request import Request, urlopen
 
 from .settings import Settings
 from .state import SnapshotStore
+from .history import HistoryStore
+from .tracks import TrackBuffer
 
 LOG = logging.getLogger(__name__)
 
 
 class CollectorGroup:
-    def __init__(self, settings: Settings, store: SnapshotStore) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        store: SnapshotStore,
+        tracks: TrackBuffer | None = None,
+        history: HistoryStore | None = None,
+    ) -> None:
         self.settings = settings
         self.store = store
+        self.tracks = tracks
+        self.history = history
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
 
@@ -92,12 +102,23 @@ class CollectorGroup:
             "signals": "/signals",
         }
         while not self._stop.is_set():
+            fetched: dict[str, dict[str, Any] | None] = {}
             for store_key, path in endpoints.items():
                 payload, error = self._fetch_json(f"{self.settings.dragonsync_url}{path}")
                 if error:
                     self.store.set_error(store_key, error)
+                    fetched[store_key] = None
                 else:
                     self.store.update(store_key, payload)
+                    fetched[store_key] = payload
+            if self.tracks is not None:
+                try:
+                    recorded = self.tracks.ingest(fetched["drones"], fetched["signals"], fetched["dragonsync_status"])
+                    if self.history is not None:
+                        kit, signals = self.tracks.context()
+                        self.history.record(recorded, kit, signals)
+                except Exception:
+                    LOG.exception("map track update failed")
             self._stop.wait(max(self.settings.dragonsync_poll_seconds, 5.0))
 
     def _fetch_json(self, url: str) -> tuple[dict[str, Any], str | None]:

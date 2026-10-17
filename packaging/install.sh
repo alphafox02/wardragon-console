@@ -226,6 +226,8 @@ EOF
 fi
 
 install -d -o "${TARGET_USER}" -g "${TARGET_GROUP}" -m 0700 "${DRAGONSYNC_DIR}/certs"
+install -d -o "${TARGET_USER}" -g "${TARGET_GROUP}" -m 0750 /var/lib/wardragon-console
+install -d -o "${TARGET_USER}" -g "${TARGET_GROUP}" -m 0750 /var/lib/wardragon-console/maps
 
 systemctl daemon-reload
 systemctl enable wardragon-console.service

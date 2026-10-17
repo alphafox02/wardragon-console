@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 DEFAULT_DRAGONSYNC_DIR = Path("/home/dragon/WarDragon/DragonSync")
 DEFAULT_DRAGONSCOPE_DIR = Path("/home/dragon/WarDragon/dragonsdr_dji_droneid")
 DEFAULT_CONSOLE_REPO_DIR = Path("/home/dragon/WarDragon/wardragon-console")
 DEFAULT_DRONEID_DIR = Path("/home/dragon/WarDragon/droneid-go")
+DEFAULT_DATA_DIR = Path("/var/lib/wardragon-console")
+DEFAULT_MAP_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+DEFAULT_MAP_TILE_ATTRIBUTION = "© OpenStreetMap contributors"
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,12 @@ class Settings:
     droneid_upstream_repo: str = "alphafox02/droneid-go"
     dragonscope_license_check_enabled: bool = True
     upgrade_enabled: bool = True
+    map_enabled: bool = True
+    map_tile_url: str = DEFAULT_MAP_TILE_URL
+    map_tile_attribution: str = DEFAULT_MAP_TILE_ATTRIBUTION
+    data_dir: Path = DEFAULT_DATA_DIR
+    history_max_bytes: int = 500 * 1024 * 1024
+    map_upload_max_bytes: int = 2048 * 1024 * 1024
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -90,6 +101,12 @@ class Settings:
             droneid_upstream_repo=os.environ.get("WARDRAGON_DRONEID_UPSTREAM_REPO", "alphafox02/droneid-go"),
             dragonscope_license_check_enabled=_env_bool("WARDRAGON_DRAGONSCOPE_LICENSE_CHECK", True),
             upgrade_enabled=_env_bool("WARDRAGON_CONSOLE_UPGRADE", True),
+            map_enabled=_env_bool("WARDRAGON_CONSOLE_MAP", True),
+            map_tile_url=os.environ.get("WARDRAGON_CONSOLE_MAP_TILE_URL", DEFAULT_MAP_TILE_URL).strip(),
+            map_tile_attribution=os.environ.get("WARDRAGON_CONSOLE_MAP_TILE_ATTRIBUTION", DEFAULT_MAP_TILE_ATTRIBUTION).strip(),
+            data_dir=Path(os.environ.get("WARDRAGON_CONSOLE_DATA_DIR", str(DEFAULT_DATA_DIR))),
+            history_max_bytes=_env_int("WARDRAGON_CONSOLE_HISTORY_MAX_MB", 500) * 1024 * 1024,
+            map_upload_max_bytes=_env_int("WARDRAGON_CONSOLE_MAP_UPLOAD_MAX_MB", 2048) * 1024 * 1024,
         )
 
     def can_write_config(self) -> bool:
@@ -112,6 +129,21 @@ class Settings:
         if self.is_local_bind():
             return True
         return self.allow_remote_restart
+
+    def map_tile_origin(self) -> str:
+        """Origin allowed for map tile images, or "" when online tiles are off or the URL is unusable."""
+        url = self.map_tile_url
+        if not url or not all(part in url for part in ("{z}", "{x}", "{y}")):
+            return ""
+        parsed = urlparse(url.replace("{s}", "a"))
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return ""
+        host = parsed.netloc
+        if not re.fullmatch(r"[A-Za-z0-9.\-:]+", host):
+            return ""
+        if "{s}." in url:
+            host = "*." + host.split(".", 1)[1]
+        return f"{parsed.scheme}://{host}"
 
     def is_local_bind(self) -> bool:
         return self.bind_host in {"127.0.0.1", "localhost", "::1"}

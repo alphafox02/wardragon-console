@@ -62,6 +62,8 @@ document.querySelectorAll(".tab").forEach((button) => {
     document.querySelectorAll(".panel").forEach((panel) => panel.classList.remove("active"));
     button.classList.add("active");
     document.getElementById(button.dataset.tab).classList.add("active");
+    if (button.dataset.tab === "map") openMap();
+    else window.WardragonMap?.close();
     if (button.dataset.tab === "config") loadConfig();
     if (button.dataset.tab === "dragonscope") loadDragonscope();
   });
@@ -88,6 +90,38 @@ document.addEventListener("click", (event) => {
   input.type = input.type === "password" ? "text" : "password";
   button.textContent = input.type === "password" ? "Show" : "Hide";
 });
+
+let mapLoading = null;
+
+function loadAsset(tag, attrs) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement(tag);
+    Object.assign(el, attrs);
+    el.onload = resolve;
+    el.onerror = () => reject(new Error(`could not load ${attrs.src || attrs.href}`));
+    document.head.appendChild(el);
+  });
+}
+
+async function openMap() {
+  const hasDragonSig = state.snapshot?.capabilities?.has_dragonsig !== false;
+  if (!mapLoading) {
+    mapLoading = Promise.all([
+      loadAsset("link", { rel: "stylesheet", href: "/static/vendor/leaflet/leaflet.css" }),
+      loadAsset("script", { src: "/static/vendor/leaflet/leaflet.js" }),
+    ]).then(() => loadAsset("script", { src: "/static/map.js" }));
+  }
+  try {
+    await mapLoading;
+  } catch (error) {
+    mapLoading = null;
+    document.getElementById("map-note").textContent = error.message;
+    return;
+  }
+  if (document.querySelector(".tab.active")?.dataset.tab === "map") {
+    window.WardragonMap.open({ hasDragonSig });
+  }
+}
 
 async function loadSnapshot() {
   try {
@@ -373,6 +407,7 @@ async function clearKitIdOverride() {
 function renderSnapshot() {
   const snap = state.snapshot;
   if (!snap) return;
+  document.getElementById("tab-map").hidden = !snap.access?.map_enabled;
   const monitor = snap.monitor.payload || {};
   const gps = monitor.gps_data || {};
   const stats = monitor.system_stats || {};
