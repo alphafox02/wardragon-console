@@ -79,9 +79,6 @@ document.getElementById("upload-cert").addEventListener("click", uploadCertifica
 document.getElementById("check-updates").addEventListener("click", checkForUpdates);
 document.getElementById("dragonscope-save").addEventListener("click", saveDragonscope);
 document.getElementById("dragonscope-check-license").addEventListener("click", checkDragonscopeLicense);
-document.getElementById("kit-id-override-save").addEventListener("click", saveKitIdOverride);
-document.getElementById("kit-id-override-clear").addEventListener("click", clearKitIdOverride);
-document.getElementById("kit-id-override-input").addEventListener("input", updateKitIdPreview);
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-reveal]");
   if (!button) return;
@@ -310,98 +307,32 @@ async function saveDragonscope() {
   }
 }
 
-const KIT_ID_OVERRIDE_RE = /^[A-Za-z0-9._-]{1,32}$/;
-
-function updateKitIdPreview() {
-  const value = document.getElementById("kit-id-override-input").value.trim();
-  const preview = document.getElementById("kit-id-override-preview");
-  preview.textContent = value ? `wardragon-${value}` : "wardragon-<serial>";
-}
-
+// The Kit ID is read-only here. If a kit-id-override file already exists it
+// keeps working; we only say so, so support can see why the id is not the
+// hardware serial.
 async function loadKitIdOverride() {
-  const input = document.getElementById("kit-id-override-input");
-  const pathEl = document.getElementById("kit-id-override-path");
-  const notice = document.getElementById("kit-id-override-status");
+  const notice = document.getElementById("kit-identity-override");
   try {
     const response = await fetch("/api/kit-id-override", { cache: "no-store" });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || response.statusText);
-    input.value = payload.value || "";
-    if (payload.path) {
-      pathEl.textContent = `File: ${payload.path} · ${payload.exists ? "override active" : "no override — using auto-detected serial"}`;
+    if (payload.exists && payload.value) {
+      notice.textContent = `This kit uses a custom Kit ID suffix "${payload.value}" from ${payload.path}, set before the Kit ID became fixed. It stays in effect.`;
+      notice.hidden = false;
+    } else {
+      notice.textContent = "";
+      notice.hidden = true;
     }
-    updateKitIdPreview();
-    notice.className = "notice";
+  } catch (error) {
     notice.textContent = "";
-  } catch (error) {
-    notice.className = "notice error";
-    notice.textContent = `Load failed: ${error.message || error}`;
+    notice.hidden = true;
   }
 }
 
-async function saveKitIdOverride() {
-  const button = document.getElementById("kit-id-override-save");
-  const notice = document.getElementById("kit-id-override-status");
-  if (button.dataset.busy === "1") return;
-  const value = document.getElementById("kit-id-override-input").value.trim();
-  if (!value) {
-    notice.className = "notice error";
-    notice.textContent = "Enter a suffix, or use Clear to remove the override.";
-    return;
-  }
-  if (!KIT_ID_OVERRIDE_RE.test(value)) {
-    notice.className = "notice error";
-    notice.textContent = "Invalid suffix: alphanumeric, dot, underscore, hyphen only (1–32 chars).";
-    return;
-  }
-  button.dataset.busy = "1";
-  button.disabled = true;
-  try {
-    const response = await fetch("/api/kit-id-override", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value }),
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok) throw new Error(payload.error || response.statusText);
-    notice.className = "notice ok";
-    notice.textContent = `Saved kit-id-override = "${payload.value}". Restart wardragon-monitor for the change to take effect.`;
-    await loadKitIdOverride();
-  } catch (error) {
-    notice.className = "notice error";
-    notice.textContent = `Save failed: ${error.message || error}`;
-  } finally {
-    delete button.dataset.busy;
-    button.disabled = false;
-  }
-}
-
-async function clearKitIdOverride() {
-  const button = document.getElementById("kit-id-override-clear");
-  const notice = document.getElementById("kit-id-override-status");
-  if (button.dataset.busy === "1") return;
-  if (!confirm("Clear the Kit ID override and revert to the auto-detected serial?")) return;
-  button.dataset.busy = "1";
-  button.disabled = true;
-  try {
-    const response = await fetch("/api/kit-id-override", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: "" }),
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok) throw new Error(payload.error || response.statusText);
-    notice.className = "notice ok";
-    notice.textContent = "Override cleared. Restart wardragon-monitor to fall back to the auto-detected serial.";
-    document.getElementById("kit-id-override-input").value = "";
-    await loadKitIdOverride();
-  } catch (error) {
-    notice.className = "notice error";
-    notice.textContent = `Clear failed: ${error.message || error}`;
-  } finally {
-    delete button.dataset.busy;
-    button.disabled = false;
-  }
+function kitLabel(summary, fallback) {
+  const kitId = summary.kit_id || fallback;
+  const callsign = summary.callsign;
+  return callsign && kitId && callsign !== kitId ? `${callsign} (${kitId})` : (kitId || callsign || "");
 }
 
 function renderSnapshot() {
@@ -417,7 +348,7 @@ function renderSnapshot() {
   const hasDragonSig = snap.capabilities?.has_dragonsig !== false;
   applyDragonSigVisibility(hasDragonSig);
 
-  document.getElementById("kit-id").textContent = snap.summary.kit_id || dsStatus.uid || snap.console.hostname || "Kit unavailable";
+  document.getElementById("kit-id").textContent = kitLabel(snap.summary, dsStatus.uid) || snap.console.hostname || "Kit unavailable";
   document.getElementById("drone-count").textContent = drones.length;
   if (hasDragonSig) {
     document.getElementById("signal-count").textContent = signals.length;
@@ -427,6 +358,7 @@ function renderSnapshot() {
   renderDl("kit-summary", {
     Hostname: snap.console.hostname,
     "Kit ID": snap.summary.kit_id || "N/A",
+    Callsign: snap.summary.callsign || "N/A",
     "Tablet URL": snap.access?.tether?.url || "No tether detected",
     "GPS fix": snap.summary.gps_fix ? "yes" : "no",
     "Console uptime": fmt.time(snap.console.uptime_seconds),
@@ -468,8 +400,13 @@ function renderSnapshot() {
     Console: snap.console.version || "0.1.0",
     Hostname: snap.console.hostname,
     "Kit ID": snap.summary.kit_id || "N/A",
+    Callsign: snap.summary.callsign || "N/A",
     "droneid-go": snap.droneid.payload?.version || "N/A",
   };
+  renderDl("kit-identity-details", {
+    "Kit ID": snap.summary.kit_id || "N/A",
+    "Callsign in TAK": snap.summary.callsign || "N/A",
+  });
   if (hasDragonSig) {
     versionInfo.DragonSig = snap.dragonsig.payload?.version || "N/A";
   }

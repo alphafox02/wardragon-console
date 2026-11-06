@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
+
+
+# Same rule as DragonSync's KIT_CALLSIGN_RE (utils/config.py); keep the two in
+# step. It also keeps % out of config.ini, which configparser would otherwise
+# treat as interpolation when this console and DragonSync read the file.
+KIT_CALLSIGN_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,31}$"
 
 
 @dataclass(frozen=True)
@@ -14,6 +21,9 @@ class Field:
     help: str = ""
     min_value: float | None = None
     max_value: float | None = None
+    # Optional full-match rule for text fields; blank values are always allowed.
+    pattern: str = ""
+    pattern_error: str = ""
 
 
 @dataclass(frozen=True)
@@ -37,6 +47,15 @@ CONFIG_GROUPS: tuple[Group, ...] = (
         Field("tak_multicast_port", "Multicast port", "int", help="TAK SA multicast port. Default is 6969.", min_value=1, max_value=65535),
         Field("tak_multicast_interface", "Multicast interface", help="Interface/IP for multicast. 0.0.0.0 sends on all active interfaces."),
         Field("multicast_ttl", "Multicast TTL", "int", help="Multicast hop limit. Use 1 for local network only.", min_value=1, max_value=255),
+    )),
+    Group("CoT", (
+        Field(
+            "kit_callsign", "Kit callsign",
+            help="Name shown on this kit's own marker in TAK. Blank uses the Kit ID. "
+                 "Only the displayed name changes: TAK, MQTT, Lattice and the ATAK plugin keep tracking the kit by its Kit ID.",
+            pattern=KIT_CALLSIGN_PATTERN,
+            pattern_error="Kit callsign must be 1-32 letters, digits, spaces, '.', '_' or '-', starting with a letter or digit",
+        ),
     )),
     Group("TAK TLS Paths", (
         Field("tak_tls_p12", "PKCS#12 file", help="Path to client .p12 certificate for TAK TCP/TLS. Use either P12 or PEM cert+key, not both."),
@@ -144,7 +163,10 @@ def validate_value(field: Field, value: Any) -> str:
         if normalized not in field.options:
             raise ValueError(f"{field.key} must be one of {', '.join(repr(v) for v in field.options)}")
         return normalized
-    return str(value).strip()
+    text = str(value).strip()
+    if field.pattern and text and not re.fullmatch(field.pattern, text):
+        raise ValueError(field.pattern_error or f"{field.key} has an invalid value")
+    return text
 
 
 def validate_updates(name: str, values: dict[str, Any]) -> dict[str, str]:

@@ -17,7 +17,7 @@ class ConfigViewTests(unittest.TestCase):
             payload = read_config_files(settings, include_raw=False)
             mqtt_items = payload["files"][0]["sections"][0]["items"]
             self.assertIn({"key": "password", "value": "********"}, mqtt_items)
-            mqtt_form = payload["forms"][0]["groups"][4]["fields"]
+            mqtt_form = next(g for g in payload["forms"][0]["groups"] if g["title"] == "MQTT")["fields"]
             password_field = [field for field in mqtt_form if field["key"] == "mqtt_password"][0]
             self.assertEqual(password_field["value"], "")
 
@@ -29,7 +29,7 @@ class ConfigViewTests(unittest.TestCase):
             settings = Settings(dragonsync_dir=root, bind_host="0.0.0.0", allow_remote_config_write=True)
 
             payload = read_config_files(settings, include_raw=False)
-            mqtt_form = payload["forms"][0]["groups"][4]["fields"]
+            mqtt_form = next(g for g in payload["forms"][0]["groups"] if g["title"] == "MQTT")["fields"]
             password_field = [field for field in mqtt_form if field["key"] == "mqtt_password"][0]
             self.assertEqual(password_field["value"], "********")
 

@@ -81,6 +81,9 @@ class SnapshotStore:
             },
             "summary": {
                 "kit_id": status.get("kit_id") or status.get("uid") or "",
+                # Name shown in TAK. DragonSync reports the Kit ID here when no
+                # callsign is set; older DragonSync has no field, so fall back.
+                "callsign": status.get("callsign") or status.get("kit_id") or status.get("uid") or "",
                 "gps_fix": _coerce_bool(status.get("gps_fix")),
                 "drone_count": len(drones.get("drones", [])) if isinstance(drones, dict) else 0,
                 "signal_count": len(signals.get("signals", [])) if isinstance(signals, dict) else 0,
