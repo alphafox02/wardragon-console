@@ -51,8 +51,8 @@ CONFIG_GROUPS: tuple[Group, ...] = (
     Group("CoT", (
         Field(
             "kit_callsign", "Kit callsign",
-            help="Name shown on this kit's own marker in TAK. Blank uses the Kit ID. "
-                 "Only the displayed name changes: TAK, MQTT, Lattice and the ATAK plugin keep tracking the kit by its Kit ID.",
+            help="Display name for this kit: its TAK marker, Home Assistant device and Lattice alias. Blank uses the Kit ID. "
+                 "Only names change: TAK, MQTT, Lattice and the ATAK plugin keep tracking the kit by its Kit ID.",
             pattern=KIT_CALLSIGN_PATTERN,
             pattern_error="Kit callsign must be 1-32 letters, digits, spaces, '.', '_' or '-', starting with a letter or digit",
         ),

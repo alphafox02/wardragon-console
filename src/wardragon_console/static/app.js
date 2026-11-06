@@ -405,7 +405,7 @@ function renderSnapshot() {
   };
   renderDl("kit-identity-details", {
     "Kit ID": snap.summary.kit_id || "N/A",
-    "Callsign in TAK": snap.summary.callsign || "N/A",
+    Callsign: snap.summary.callsign || "N/A",
   });
   if (hasDragonSig) {
     versionInfo.DragonSig = snap.dragonsig.payload?.version || "N/A";
