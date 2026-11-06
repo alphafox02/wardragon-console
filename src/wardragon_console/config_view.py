@@ -24,6 +24,27 @@ ALLOWED_FILES = {"config.ini", "gps.ini"}
 _WRITE_LOCK = threading.RLock()
 
 
+def _ini_values(parser: configparser.ConfigParser, text: str) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    """Return (defaults, {section: values}) the way DragonSync reads them.
+
+    configparser treats % as interpolation, so a plain % in a value (a
+    password, say) raises on access. Like DragonSync, fall back to reading
+    values literally then, with %% still meaning %. Files without a stray %
+    give exactly the values they always did.
+    """
+    try:
+        return dict(parser.defaults()), {s: dict(parser.items(s)) for s in parser.sections()}
+    except configparser.InterpolationError:
+        raw = configparser.ConfigParser(interpolation=None)
+        raw.optionxform = str
+        raw.read_string(text)
+
+        def unescape(values: dict[str, str]) -> dict[str, str]:
+            return {k: v.replace("%%", "%") for k, v in values.items()}
+
+        return unescape(dict(raw.defaults())), {s: unescape(dict(raw.items(s))) for s in raw.sections()}
+
+
 def read_config_files(settings: Settings, include_raw: bool = False) -> dict[str, Any]:
     show_sensitive = settings.is_local_bind()
     files = [
@@ -113,10 +134,11 @@ def write_curated_config(settings: Settings, name: str, updates: dict[str, Any])
 
     with _WRITE_LOCK:
         path = settings.dragonsync_dir / name
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
         parser = configparser.ConfigParser()
         parser.optionxform = str
-        if path.exists():
-            parser.read(path)
+        parser.read_string(existing)
+        defaults, sections = _ini_values(parser, existing)
 
         fields = {field.key: field for group in GROUPS_BY_FILE[name] for field in group.fields}
         unknown = set(updates) - set(fields)
@@ -130,20 +152,21 @@ def write_curated_config(settings: Settings, name: str, updates: dict[str, Any])
 
         current_values: dict[str, Any] = {}
         for key, field in fields.items():
-            if parser.has_section(field.section):
-                current_values[key] = parser.get(field.section, key, fallback="")
+            if field.section in sections:
+                current_values[key] = sections[field.section].get(key, defaults.get(key, ""))
             else:
                 current_values[key] = ""
         current_values.update(updates)
         normalized = validate_updates(name, current_values)
 
+        # Store % as %%, the INI escape, so DragonSync reads the value back
+        # unchanged whichever version is installed.
         validated = {
-            (fields[key].section, key): value
+            (fields[key].section, key): value.replace("%", "%%")
             for key, value in normalized.items()
             if key in updates
         }
 
-        existing = path.read_text(encoding="utf-8") if path.exists() else ""
         merged = _merge_ini_text(existing, validated)
         return write_config_file(settings, name, merged)
 
@@ -164,7 +187,9 @@ def _read_ini(path: Path, include_raw: bool) -> dict[str, Any]:
     parser = configparser.ConfigParser()
     parser.optionxform = str
     try:
-        parser.read(path)
+        text = path.read_text(encoding="utf-8", errors="replace")
+        parser.read_string(text)
+        defaults, values = _ini_values(parser, text)
     except Exception as exc:
         result["error"] = str(exc)
         return result
@@ -177,12 +202,12 @@ def _read_ini(path: Path, include_raw: bool) -> dict[str, Any]:
 
     sections: list[dict[str, Any]] = []
     form_sections: list[dict[str, Any]] = []
-    if parser.defaults():
-        sections.append({"name": "DEFAULT", "items": _items(parser.defaults())})
-        form_sections.append({"name": "DEFAULT", "items": _raw_items(parser.defaults())})
-    for section in parser.sections():
-        sections.append({"name": section, "items": _items(dict(parser.items(section)))})
-        form_sections.append({"name": section, "items": _raw_items(dict(parser.items(section)))})
+    if defaults:
+        sections.append({"name": "DEFAULT", "items": _items(defaults)})
+        form_sections.append({"name": "DEFAULT", "items": _raw_items(defaults)})
+    for section, section_values in values.items():
+        sections.append({"name": section, "items": _items(section_values)})
+        form_sections.append({"name": section, "items": _raw_items(section_values)})
     result["sections"] = sections
     result["form_sections"] = form_sections
     return result

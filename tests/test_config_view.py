@@ -1,3 +1,4 @@
+import configparser
 import tempfile
 import unittest
 from pathlib import Path
@@ -152,6 +153,61 @@ class ConfigViewTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "static_lat"):
                 write_curated_config(settings, "gps.ini", {"static_lat": "100"})
+
+
+class PercentInConfigTests(unittest.TestCase):
+    """configparser treats % as interpolation; a plain % in a value (a
+    password, say) used to break the Config tab. Read it literally, the same
+    way DragonSync does, and store % as %% when saving."""
+
+    def _settings(self, root):
+        return Settings(dragonsync_dir=root, bind_host="127.0.0.1")
+
+    def _form_value(self, payload, key):
+        for group in payload["forms"][0]["groups"]:
+            for field in group["fields"]:
+                if field["key"] == key:
+                    return field["value"]
+        raise KeyError(key)
+
+    def test_plain_percent_reads_literally(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "config.ini").write_text("[SETTINGS]\nmqtt_password = pa%ss\nmqtt_host = h%%1\n", encoding="utf-8")
+            (root / "gps.ini").write_text("[gps]\nuse_static_gps = false\n", encoding="utf-8")
+            payload = read_config_files(self._settings(root), include_raw=False)
+            self.assertIsNone(payload["files"][0]["error"])
+            self.assertEqual(self._form_value(payload, "mqtt_password"), "pa%ss")
+            self.assertEqual(self._form_value(payload, "mqtt_host"), "h%1")
+
+    def test_escaped_percent_still_reads_as_percent(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "config.ini").write_text("[SETTINGS]\nmqtt_host = h%%1\n", encoding="utf-8")
+            (root / "gps.ini").write_text("[gps]\nuse_static_gps = false\n", encoding="utf-8")
+            payload = read_config_files(self._settings(root), include_raw=False)
+            self.assertEqual(self._form_value(payload, "mqtt_host"), "h%1")
+
+    def test_saving_a_percent_writes_the_ini_escape(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "config.ini").write_text("[SETTINGS]\nmqtt_enabled = false\n", encoding="utf-8")
+            write_curated_config(self._settings(root), "config.ini", {"mqtt_password": "pa%ss"})
+            text = (root / "config.ini").read_text(encoding="utf-8")
+            self.assertIn("mqtt_password = pa%%ss", text)
+            # Any DragonSync, old or new, reads it back as typed.
+            parser = configparser.ConfigParser()
+            parser.read_string(text)
+            self.assertEqual(parser["SETTINGS"]["mqtt_password"], "pa%ss")
+
+    def test_saving_works_when_another_value_has_a_plain_percent(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "config.ini").write_text("[SETTINGS]\nmqtt_password = pa%ss\nmqtt_enabled = false\n", encoding="utf-8")
+            write_curated_config(self._settings(root), "config.ini", {"mqtt_port": "1883"})
+            text = (root / "config.ini").read_text(encoding="utf-8")
+            self.assertIn("mqtt_port = 1883", text)
+            self.assertIn("mqtt_password = pa%ss", text)  # untouched keys stay as they were
 
 
 if __name__ == "__main__":
